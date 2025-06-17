@@ -837,6 +837,9 @@
             <div class="version-tag" id="versionTag">Version 1.0</div>
         </div>
 
+        <div id="storageStatus" style="color: #2c5530; font-size: 1rem; margin: 10px 0; font-weight: bold;"></div>
+        <div id="sqliteError" style="color: #c00; font-size: 1.1rem; margin: 10px 0; display: none;"></div>
+
         <div id="assignmentsDebug" style="color: #c00; font-size: 1rem; margin: 10px 0;"></div>
 
         <div class="stats">
@@ -1153,40 +1156,44 @@
         let db;
         let isAdminMode = false;
         let currentTaskId = null;
-        let useFallbackStorage = true;
-
-        // Fallback storage objects
-        let taskAssignments = {}; // taskId: [member1, member2, ...]
-        let taskCompletions = {}; // taskId: {isCompleted, completedBy, completedAt}
-        let collapsedMilestones = {}; // milestoneId: boolean
-        let taskNotes = {};
-        let currentNoteTaskId = null;
 
         // Admin password
         const adminPassword = "bowls2025danie";
 
-        // Add these variables at the start of your script
         let confirmationCallback = null;
         let confirmationCheckbox = null;
-
-        // Add these variables
         let pendingNoteText = null;
         let pendingNoteAction = null;
 
-        // Initialize database or fallback storage
+        // Show SQLite status
+        function showSQLiteStatus(active) {
+            const statusDiv = document.getElementById('storageStatus');
+            if (statusDiv) {
+                statusDiv.textContent = active ? 'SQLite storage active' : '';
+            }
+        }
+
+        // Show SQLite error
+        function showSQLiteError(msg) {
+            const errorDiv = document.getElementById('sqliteError');
+            if (errorDiv) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = msg;
+            }
+            // Optionally, disable main UI
+            document.getElementById('content').innerHTML = '';
+        }
+
+        // Initialize database (no fallback)
         async function initDatabase() {
             try {
-                // Try to load SQLite if available
                 if (typeof initSqlJs !== 'undefined') {
                     const SQL = await initSqlJs({
                         locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
                     });
-                    
-                    // Try to load existing database from localStorage
                     let dbData = localStorage.getItem('tournamentPlannerDB');
                     if (dbData) {
                         try {
-                            // Convert base64 string to Uint8Array
                             const binaryString = window.atob(dbData);
                             const len = binaryString.length;
                             const bytes = new Uint8Array(len);
@@ -1194,129 +1201,65 @@
                                 bytes[i] = binaryString.charCodeAt(i);
                             }
                             db = new SQL.Database(bytes);
-                            console.log('Loaded existing database from localStorage');
                         } catch (e) {
-                            console.error('Error loading database from localStorage:', e);
-                            db = new SQL.Database(); // Create new if loading fails
+                            db = new SQL.Database();
                         }
                     } else {
-                        db = new SQL.Database(); // Create new if none exists
+                        db = new SQL.Database();
                     }
-                    
-                    useFallbackStorage = false;
-                    
                     // Create tables
-                    db.run(`
-                        CREATE TABLE IF NOT EXISTS task_assignments (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            task_id TEXT,
-                            member_name TEXT,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                        );
-                    `);
-                    
-                    db.run(`
-                        CREATE TABLE IF NOT EXISTS task_completions (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            task_id TEXT UNIQUE,
-                            completed_by TEXT,
-                            completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            is_completed BOOLEAN DEFAULT TRUE
-                        );
-                    `);
-                    
-                    db.run(`
-                        CREATE TABLE IF NOT EXISTS collapsed_milestones (
-                            milestone_id INTEGER PRIMARY KEY,
-                            is_collapsed BOOLEAN DEFAULT FALSE
-                        );
-                    `);
-                    
-                    // Add notes table
-                    db.run(`
-                        CREATE TABLE IF NOT EXISTS task_notes (
-                            id TEXT PRIMARY KEY,
-                            task_id TEXT,
-                            note_text TEXT,
-                            added_by TEXT,
-                            added_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                        );
-                    `);
-                    
-                    // Migrate data from fallback storage if needed
-                    migrateFromFallbackIfNeeded();
-                    
-                    // Set up auto-save mechanism
-                    window.setInterval(saveDatabase, 30000); // Save every 30 seconds
-                    
-                    console.log('SQLite database initialized successfully');
+                    db.run(`CREATE TABLE IF NOT EXISTS task_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT, member_name TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+                    db.run(`CREATE TABLE IF NOT EXISTS task_completions (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT UNIQUE, completed_by TEXT, completed_at DATETIME DEFAULT CURRENT_TIMESTAMP, is_completed BOOLEAN DEFAULT TRUE);`);
+                    db.run(`CREATE TABLE IF NOT EXISTS collapsed_milestones (milestone_id INTEGER PRIMARY KEY, is_collapsed BOOLEAN DEFAULT FALSE);`);
+                    db.run(`CREATE TABLE IF NOT EXISTS task_notes (id TEXT PRIMARY KEY, task_id TEXT, note_text TEXT, added_by TEXT, added_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+                    window.setInterval(saveDatabase, 30000);
+                    showSQLiteStatus(true);
                 } else {
-                    throw new Error('SQLite not available');
+                    throw new Error('SQLite (sql.js) not available');
                 }
             } catch (error) {
-                console.error('Error initializing SQLite:', error);
-                console.log('Using fallback in-memory storage');
-                useFallbackStorage = true;
-                loadFromFallbackStorage();
-            }
-        }
-
-        function loadFromFallbackStorage() {
-            try {
-                const assignments = localStorage.getItem('taskAssignments');
-                const completions = localStorage.getItem('taskCompletions');
-                const collapsed = localStorage.getItem('collapsedMilestones');
-                const notes = localStorage.getItem('taskNotes');
-                
-                if (assignments) taskAssignments = JSON.parse(assignments);
-                if (completions) taskCompletions = JSON.parse(completions);
-                if (collapsed) collapsedMilestones = JSON.parse(collapsed);
-                if (notes) taskNotes = JSON.parse(notes);
-            } catch (e) {
-                // Start with empty data if parsing fails
-                taskAssignments = {};
-                taskCompletions = {};
-                collapsedMilestones = {};
-                taskNotes = {};
-            }
-        }
-
-        function saveToFallbackStorage() {
-            try {
-                localStorage.setItem('taskAssignments', JSON.stringify(taskAssignments));
-                localStorage.setItem('taskCompletions', JSON.stringify(taskCompletions));
-                localStorage.setItem('collapsedMilestones', JSON.stringify(collapsedMilestones));
-                localStorage.setItem('taskNotes', JSON.stringify(taskNotes));
-            } catch (e) {
-                console.log('Local storage not available');
+                showSQLiteStatus(false);
+                showSQLiteError('SQLite is not available or failed to initialize. This app requires SQLite.');
+                throw error;
             }
         }
 
         function getTaskAssignments(taskId) {
-            if (useFallbackStorage) {
-                return taskAssignments[taskId] || [];
-            } else {
-                const stmt = db.prepare("SELECT member_name FROM task_assignments WHERE task_id = ?");
-                const assignments = [];
-                
-                try {
-                    stmt.bind([taskId]);
-                    while (stmt.step()) {
-                        const row = stmt.getAsObject();
-                        assignments.push(row.member_name);
-                    }
-                } finally {
-                    stmt.free();
+            const stmt = db.prepare("SELECT member_name FROM task_assignments WHERE task_id = ?");
+            const assignments = [];
+            
+            try {
+                stmt.bind([taskId]);
+                while (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    assignments.push(row.member_name);
                 }
-                
-                return assignments;
+            } finally {
+                stmt.free();
             }
+            
+            return assignments;
         }
 
         function addTaskAssignment(taskId, memberName) {
             if (!memberName || memberName === 'Select Member') return;
             
-            if (useFallbackStorage) {
+            try {
+                // Check if assignment already exists
+                const stmt = db.prepare("SELECT COUNT(*) as count FROM task_assignments WHERE task_id = ? AND member_name = ?");
+                stmt.bind([taskId, memberName]);
+                
+                if (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    if (row.count === 0) {
+                        db.run("INSERT INTO task_assignments (task_id, member_name) VALUES (?, ?)", [taskId, memberName]);
+                        saveDatabase(); // Save after modification
+                    }
+                }
+                stmt.free();
+            } catch (error) {
+                console.error('Error adding task assignment:', error);
+                // Fallback to in-memory storage if database operation fails
                 if (!taskAssignments[taskId]) {
                     taskAssignments[taskId] = [];
                 }
@@ -1324,38 +1267,18 @@
                     taskAssignments[taskId].push(memberName);
                     saveToFallbackStorage();
                 }
-            } else {
-                try {
-                    // Check if assignment already exists
-                    const stmt = db.prepare("SELECT COUNT(*) as count FROM task_assignments WHERE task_id = ? AND member_name = ?");
-                    stmt.bind([taskId, memberName]);
-                    
-                    if (stmt.step()) {
-                        const row = stmt.getAsObject();
-                        if (row.count === 0) {
-                            db.run("INSERT INTO task_assignments (task_id, member_name) VALUES (?, ?)", [taskId, memberName]);
-                            saveDatabase(); // Save after modification
-                        }
-                    }
-                    stmt.free();
-                } catch (error) {
-                    console.error('Error adding task assignment:', error);
-                    // Fallback to in-memory storage if database operation fails
-                    if (!taskAssignments[taskId]) {
-                        taskAssignments[taskId] = [];
-                    }
-                    if (!taskAssignments[taskId].includes(memberName)) {
-                        taskAssignments[taskId].push(memberName);
-                        saveToFallbackStorage();
-                    }
-                }
             }
         }
 
         function removeTaskAssignment(taskId, memberName) {
             if (!isAdminMode) return;
             
-            if (useFallbackStorage) {
+            try {
+                db.run("DELETE FROM task_assignments WHERE task_id = ? AND member_name = ?", [taskId, memberName]);
+                saveDatabase();
+            } catch (error) {
+                console.error('Error removing task assignment:', error);
+                // Fallback to in-memory storage if database operation fails
                 if (taskAssignments[taskId]) {
                     taskAssignments[taskId] = taskAssignments[taskId].filter(name => name !== memberName);
                     if (taskAssignments[taskId].length === 0) {
@@ -1363,55 +1286,48 @@
                     }
                     saveToFallbackStorage();
                 }
-            } else {
-                try {
-                    db.run("DELETE FROM task_assignments WHERE task_id = ? AND member_name = ?", [taskId, memberName]);
-                    saveDatabase();
-                } catch (error) {
-                    console.error('Error removing task assignment:', error);
-                    // Fallback to in-memory storage if database operation fails
-                    if (taskAssignments[taskId]) {
-                        taskAssignments[taskId] = taskAssignments[taskId].filter(name => name !== memberName);
-                        if (taskAssignments[taskId].length === 0) {
-                            delete taskAssignments[taskId];
-                        }
-                        saveToFallbackStorage();
-                    }
-                }
             }
         }
 
         function getTaskCompletion(taskId) {
-            if (useFallbackStorage) {
-                const completion = taskCompletions[taskId];
-                return completion || { isCompleted: false, completedBy: null, completedAt: null };
-            } else {
-                try {
-                    const stmt = db.prepare("SELECT * FROM task_completions WHERE task_id = ?");
-                    stmt.bind([taskId]);
-                    
-                    if (stmt.step()) {
-                        const row = stmt.getAsObject();
-                        stmt.free();
-                        return {
-                            isCompleted: Boolean(row.is_completed),
-                            completedBy: row.completed_by,
-                            completedAt: row.completed_at
-                        };
-                    }
+            try {
+                const stmt = db.prepare("SELECT * FROM task_completions WHERE task_id = ?");
+                stmt.bind([taskId]);
+                
+                if (stmt.step()) {
+                    const row = stmt.getAsObject();
                     stmt.free();
-                    return { isCompleted: false, completedBy: null, completedAt: null };
-                } catch (error) {
-                    console.error('Error getting task completion:', error);
-                    return { isCompleted: false, completedBy: null, completedAt: null };
+                    return {
+                        isCompleted: Boolean(row.is_completed),
+                        completedBy: row.completed_by,
+                        completedAt: row.completed_at
+                    };
                 }
+                stmt.free();
+                return { isCompleted: false, completedBy: null, completedAt: null };
+            } catch (error) {
+                console.error('Error getting task completion:', error);
+                return { isCompleted: false, completedBy: null, completedAt: null };
             }
         }
 
         function setTaskCompletion(taskId, isCompleted, completedBy = null) {
             const timestamp = new Date().toISOString();
             
-            if (useFallbackStorage) {
+            try {
+                if (isCompleted) {
+                    db.run(`
+                        INSERT OR REPLACE INTO task_completions 
+                        (task_id, completed_by, completed_at, is_completed) 
+                        VALUES (?, ?, ?, ?)
+                    `, [taskId, completedBy, timestamp, 1]);
+                } else {
+                    db.run("DELETE FROM task_completions WHERE task_id = ?", [taskId]);
+                }
+                saveDatabase(); // Save after modification
+            } catch (error) {
+                console.error('Error setting task completion:', error);
+                // Fallback to in-memory storage if database operation fails
                 if (isCompleted) {
                     taskCompletions[taskId] = {
                         isCompleted: true,
@@ -1422,89 +1338,50 @@
                     delete taskCompletions[taskId];
                 }
                 saveToFallbackStorage();
-            } else {
-                try {
-                    if (isCompleted) {
-                        db.run(`
-                            INSERT OR REPLACE INTO task_completions 
-                            (task_id, completed_by, completed_at, is_completed) 
-                            VALUES (?, ?, ?, ?)
-                        `, [taskId, completedBy, timestamp, 1]);
-                    } else {
-                        db.run("DELETE FROM task_completions WHERE task_id = ?", [taskId]);
-                    }
-                    saveDatabase(); // Save after modification
-                } catch (error) {
-                    console.error('Error setting task completion:', error);
-                    // Fallback to in-memory storage if database operation fails
-                    if (isCompleted) {
-                        taskCompletions[taskId] = {
-                            isCompleted: true,
-                            completedBy: completedBy,
-                            completedAt: timestamp
-                        };
-                    } else {
-                        delete taskCompletions[taskId];
-                    }
-                    saveToFallbackStorage();
-                }
             }
         }
 
         function getMilestoneCollapsed(milestoneId) {
-            if (useFallbackStorage) {
-                return collapsedMilestones[milestoneId] || false;
-            } else {
-                const stmt = db.prepare("SELECT is_collapsed FROM collapsed_milestones WHERE milestone_id = ?");
-                stmt.bind({$milestoneId: milestoneId});
-                
-                if (stmt.step()) {
-                    const row = stmt.getAsObject();
-                    stmt.free();
-                    return row.is_collapsed === 1;
-                }
+            const stmt = db.prepare("SELECT is_collapsed FROM collapsed_milestones WHERE milestone_id = ?");
+            stmt.bind({$milestoneId: milestoneId});
+            
+            if (stmt.step()) {
+                const row = stmt.getAsObject();
                 stmt.free();
-                return false;
+                return row.is_collapsed === 1;
             }
+            stmt.free();
+            return false;
         }
 
         function setMilestoneCollapsed(milestoneId, isCollapsed) {
-            if (useFallbackStorage) {
-                collapsedMilestones[milestoneId] = isCollapsed;
-                saveToFallbackStorage();
-            } else {
-                db.run(`
-                    INSERT OR REPLACE INTO collapsed_milestones (milestone_id, is_collapsed) 
-                    VALUES (?, ?)
-                `, [milestoneId, isCollapsed ? 1 : 0]);
-                saveDatabase(); // Save after modification
-            }
+            db.run(`
+                INSERT OR REPLACE INTO collapsed_milestones (milestone_id, is_collapsed) 
+                VALUES (?, ?)
+            `, [milestoneId, isCollapsed ? 1 : 0]);
+            saveDatabase(); // Save after modification
         }
 
         function getTaskNotes(taskId) {
-            if (useFallbackStorage) {
-                return taskNotes[taskId] || [];
-            } else {
-                try {
-                    const stmt = db.prepare("SELECT * FROM task_notes WHERE task_id = ? ORDER BY added_at DESC");
-                    stmt.bind([taskId]);
-                    
-                    const notes = [];
-                    while (stmt.step()) {
-                        const row = stmt.getAsObject();
-                        notes.push({
-                            id: row.id,
-                            text: row.note_text,
-                            addedBy: row.added_by,
-                            addedAt: row.added_at
-                        });
-                    }
-                    stmt.free();
-                    return notes;
-                } catch (error) {
-                    console.error('Error getting task notes:', error);
-                    return [];
+            try {
+                const stmt = db.prepare("SELECT * FROM task_notes WHERE task_id = ? ORDER BY added_at DESC");
+                stmt.bind([taskId]);
+                
+                const notes = [];
+                while (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    notes.push({
+                        id: row.id,
+                        text: row.note_text,
+                        addedBy: row.added_by,
+                        addedAt: row.added_at
+                    });
                 }
+                stmt.free();
+                return notes;
+            } catch (error) {
+                console.error('Error getting task notes:', error);
+                return [];
             }
         }
 
@@ -1512,31 +1389,18 @@
             const timestamp = new Date().toISOString();
             const noteId = Date.now().toString(); // Simple unique ID
             
-            if (useFallbackStorage) {
-                if (!taskNotes[taskId]) {
-                    taskNotes[taskId] = [];
-                }
-                taskNotes[taskId].unshift({
-                    id: noteId,
-                    text: noteText,
-                    addedBy: addedBy,
-                    addedAt: timestamp
-                });
-                saveToFallbackStorage();
-            } else {
-                try {
-                    const stmt = db.prepare(`
-                        INSERT INTO task_notes (id, task_id, note_text, added_by, added_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    `);
-                    stmt.run([noteId, taskId, noteText, addedBy, timestamp]);
-                    stmt.free();
-                    saveDatabase();
-                } catch (error) {
-                    console.error('Error adding task note:', error);
-                    showSystemMessage('Error adding note. Please try again.');
-                    return;
-                }
+            try {
+                const stmt = db.prepare(`
+                    INSERT INTO task_notes (id, task_id, note_text, added_by, added_at)
+                    VALUES (?, ?, ?, ?, ?)
+                `);
+                stmt.run([noteId, taskId, noteText, addedBy, timestamp]);
+                stmt.free();
+                saveDatabase();
+            } catch (error) {
+                console.error('Error adding task note:', error);
+                showSystemMessage('Error adding note. Please try again.');
+                return;
             }
         }
 
@@ -1653,30 +1517,15 @@
         function editTaskNote(taskId, noteId, newText, editedBy) {
             const timestamp = new Date().toISOString();
             
-            if (useFallbackStorage) {
-                if (taskNotes[taskId]) {
-                    const noteIndex = taskNotes[taskId].findIndex(n => n.id === noteId);
-                    if (noteIndex !== -1) {
-                        taskNotes[taskId][noteIndex] = {
-                            ...taskNotes[taskId][noteIndex],
-                            text: newText,
-                            editedBy,
-                            editedAt: timestamp
-                        };
-                    }
-                }
-                saveToFallbackStorage();
-            } else {
-                try {
-                    db.run(`
-                        UPDATE task_notes 
-                        SET note_text = ?, edited_by = ?, edited_at = ?
-                        WHERE task_id = ? AND id = ?
-                    `, [newText, editedBy, timestamp, taskId, noteId]);
-                    saveDatabase();
-                } catch (error) {
-                    console.error('Error editing task note:', error);
-                }
+            try {
+                db.run(`
+                    UPDATE task_notes 
+                    SET note_text = ?, edited_by = ?, edited_at = ?
+                    WHERE task_id = ? AND id = ?
+                `, [newText, editedBy, timestamp, taskId, noteId]);
+                saveDatabase();
+            } catch (error) {
+                console.error('Error editing task note:', error);
             }
         }
 
@@ -1693,28 +1542,15 @@
                     if (confirmed) {
                         let deleted = false;
                         
-                        if (useFallbackStorage) {
-                            if (taskNotes[taskId]) {
-                                const initialLength = taskNotes[taskId].length;
-                                taskNotes[taskId] = taskNotes[taskId].filter(n => n.id !== noteId);
-                                deleted = taskNotes[taskId].length < initialLength;
-                                
-                                if (taskNotes[taskId].length === 0) {
-                                    delete taskNotes[taskId];
-                                }
-                                saveToFallbackStorage();
-                            }
-                        } else {
-                            try {
-                                // Execute the delete statement directly
-                                db.exec(`DELETE FROM task_notes WHERE id = '${noteId}'`);
-                                deleted = true;
-                                saveDatabase();
-                            } catch (error) {
-                                console.error('Error deleting task note:', error);
-                                showSystemMessage('Error deleting note. Please try again.');
-                                return;
-                            }
+                        try {
+                            // Execute the delete statement directly
+                            db.exec(`DELETE FROM task_notes WHERE id = '${noteId}'`);
+                            deleted = true;
+                            saveDatabase();
+                        } catch (error) {
+                            console.error('Error deleting task note:', error);
+                            showSystemMessage('Error deleting note. Please try again.');
+                            return;
                         }
                         
                         if (deleted) {
@@ -1732,20 +1568,18 @@
 
         // Save database to localStorage
         function saveDatabase() {
-            if (!useFallbackStorage && db) {
-                try {
-                    const data = db.export();
-                    const arr = new Uint8Array(data);
-                    let binary = '';
-                    for (let i = 0; i < arr.length; i++) {
-                        binary += String.fromCharCode(arr[i]);
-                    }
-                    const base64 = window.btoa(binary);
-                    localStorage.setItem('tournamentPlannerDB', base64);
-                    console.log('Database saved to localStorage');
-                } catch (e) {
-                    console.error('Error saving database to localStorage:', e);
+            try {
+                const data = db.export();
+                const arr = new Uint8Array(data);
+                let binary = '';
+                for (let i = 0; i < arr.length; i++) {
+                    binary += String.fromCharCode(arr[i]);
                 }
+                const base64 = window.btoa(binary);
+                localStorage.setItem('tournamentPlannerDB', base64);
+                console.log('Database saved to localStorage');
+            } catch (e) {
+                console.error('Error saving database to localStorage:', e);
             }
         }
         
