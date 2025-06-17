@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bronkhorstspruit Bowling Club Tournament Planner</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>Tournament Planning Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- SQL.js library for SQLite support -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <style>
@@ -893,7 +893,7 @@
                 </div>
             </div>
             <div class="button-group">
-                <button class="btn btn-primary" onclick="exportProgress()">📊 Export Progress</button>
+                <button class="btn btn-primary" onclick="exportProgress()">📄 Export PDF</button>
                 <button class="btn btn-secondary" onclick="clearFilters()">🔄 Clear Filters</button>
                 <button class="btn btn-primary" onclick="markAllComplete()" ${!isAdminMode ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>✅ Mark Milestone Complete</button>
                 <button class="btn btn-secondary" onclick="toggleAllMilestones(false)">🔽 Expand All</button>
@@ -2282,15 +2282,60 @@
         }
 
         function exportProgress() {
-            // Export database as SQL
-            const data = db.export();
-            const blob = new Blob([data], { type: 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'tournament-progress.db';
-            a.click();
-            URL.revokeObjectURL(url);
+            // First expand all milestones for the PDF
+            toggleAllMilestones(false);
+            
+            // Create a clone of the container for PDF generation
+            const container = document.querySelector('.container');
+            const clone = container.cloneNode(true);
+            
+            // Remove buttons and admin sections from the clone
+            clone.querySelectorAll('.button-group, .filters, .floating-action').forEach(el => el.remove());
+            clone.querySelectorAll('.add-member-btn, .remove-tag, .add-note-btn').forEach(el => el.remove());
+            
+            // Add current date to the header
+            const dateDiv = document.createElement('div');
+            dateDiv.style.fontSize = '1rem';
+            dateDiv.style.marginTop = '10px';
+            dateDiv.style.color = '#666';
+            dateDiv.textContent = `Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
+            clone.querySelector('.header').appendChild(dateDiv);
+            
+            // Configure PDF options
+            const opt = {
+                margin: [10, 10],
+                filename: 'tournament-progress.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    letterRendering: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait' 
+                }
+            };
+            
+            // Create a temporary div for the clone
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.appendChild(clone);
+            document.body.appendChild(tempDiv);
+            
+            // Generate PDF
+            html2pdf().set(opt).from(clone).save()
+                .then(() => {
+                    // Clean up
+                    document.body.removeChild(tempDiv);
+                    showSystemMessage('PDF generated successfully!');
+                })
+                .catch(err => {
+                    console.error('PDF generation error:', err);
+                    showSystemMessage('Error generating PDF. Please try again.');
+                });
         }
 
         function markAllComplete() {
@@ -2436,6 +2481,40 @@
             confirmationCallback = null;
             confirmationCheckbox = null;
         }
+
+        function toggleAdminMode() {
+            const passwordInput = document.getElementById('adminPassword');
+            const adminBtn = document.getElementById('adminBtn');
+            if (!isAdminMode) {
+                if (passwordInput.value === adminPassword) {
+                    isAdminMode = true;
+                    adminBtn.textContent = 'Disable Admin';
+                    adminBtn.className = 'btn btn-secondary';
+                    passwordInput.style.display = 'none';
+                    showSystemMessage('Admin mode enabled!');
+                } else {
+                    showSystemMessage('Incorrect password. Please try again.');
+                    passwordInput.value = '';
+                    return;
+                }
+            } else {
+                isAdminMode = false;
+                adminBtn.textContent = 'Enable Admin';
+                adminBtn.className = 'btn btn-primary';
+                passwordInput.style.display = 'block';
+                passwordInput.value = '';
+                showSystemMessage('Admin mode disabled.');
+            }
+            renderTasks();
+            updateStats();
+        }
+
+        // Ensure updateStats is called after rendering tasks
+        const originalRenderTasks = renderTasks;
+        renderTasks = function() {
+            originalRenderTasks();
+            updateStats();
+        };
 
         // Initialize on page load
         window.addEventListener('load', init);
