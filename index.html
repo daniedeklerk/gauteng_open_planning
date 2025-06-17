@@ -1691,7 +1691,8 @@
                             }
                         } else {
                             try {
-                                db.run("DELETE FROM task_notes WHERE task_id = ? AND id = ?", [taskId, noteId]);
+                                // Simpler SQLite deletion approach
+                                const result = db.exec(`DELETE FROM task_notes WHERE task_id = '${taskId}' AND id = '${noteId}'`);
                                 deleted = true;
                                 saveDatabase();
                             } catch (error) {
