@@ -1510,13 +1510,17 @@
                 saveToFallbackStorage();
             } else {
                 try {
-                    db.run(`
+                    const stmt = db.prepare(`
                         INSERT INTO task_notes (id, task_id, note_text, added_by, added_at)
                         VALUES (?, ?, ?, ?, ?)
-                    `, [noteId, taskId, noteText, addedBy, timestamp]);
+                    `);
+                    stmt.run([noteId, taskId, noteText, addedBy, timestamp]);
+                    stmt.free();
                     saveDatabase();
                 } catch (error) {
                     console.error('Error adding task note:', error);
+                    showSystemMessage('Error adding note. Please try again.');
+                    return;
                 }
             }
         }
@@ -1533,15 +1537,6 @@
             noteText.focus();
         }
 
-        function closeNoteModal() {
-            const modal = document.getElementById('noteModal');
-            const overlay = document.getElementById('modalOverlay');
-            modal.style.display = 'none';
-            overlay.style.display = 'none';
-            document.getElementById('noteText').value = '';
-            currentNoteTaskId = null;
-        }
-
         function confirmAddNote() {
             const noteText = document.getElementById('noteText').value.trim();
             
@@ -1551,6 +1546,19 @@
             }
             
             showNoteNameModal(noteText, 'add');
+            // Close the note modal first
+            closeNoteModal();
+        }
+
+        function closeNoteModal() {
+            const modal = document.getElementById('noteModal');
+            const overlay = document.getElementById('modalOverlay');
+            modal.style.display = 'none';
+            if (!document.getElementById('noteNameModal').style.display === 'block') {
+                overlay.style.display = 'none';
+            }
+            document.getElementById('noteText').value = '';
+            currentNoteTaskId = null;
         }
 
         function showNoteNameModal(noteText, action) {
@@ -1634,9 +1642,15 @@
                 null,
                 (confirmed) => {
                     if (confirmed) {
+                        let deleted = false;
+                        
                         if (useFallbackStorage) {
                             if (taskNotes[taskId]) {
+                                const initialLength = taskNotes[taskId].length;
                                 taskNotes[taskId] = taskNotes[taskId].filter(n => n.id !== noteId);
+                                if (taskNotes[taskId].length < initialLength) {
+                                    deleted = true;
+                                }
                                 if (taskNotes[taskId].length === 0) {
                                     delete taskNotes[taskId];
                                 }
@@ -1644,15 +1658,22 @@
                             }
                         } else {
                             try {
-                                db.run("DELETE FROM task_notes WHERE task_id = ? AND id = ?", [taskId, noteId]);
+                                const stmt = db.prepare("DELETE FROM task_notes WHERE task_id = ? AND id = ?");
+                                stmt.run([taskId, noteId]);
+                                stmt.free();
+                                deleted = true;
                                 saveDatabase();
                             } catch (error) {
                                 console.error('Error deleting task note:', error);
+                                showSystemMessage('Error deleting note. Please try again.');
                                 return;
                             }
                         }
-                        renderTasks();
-                        showSystemMessage('Note deleted successfully!');
+                        
+                        if (deleted) {
+                            showSystemMessage('Note deleted successfully!');
+                            renderTasks(); // Re-render only if actually deleted
+                        }
                     }
                 }
             );
