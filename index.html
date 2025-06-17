@@ -753,23 +753,20 @@
         .note-action-btn {
             background: none;
             border: none;
-            color: #666;
+            color: #dc3545;
             cursor: pointer;
             padding: 4px;
-            font-size: 0.9rem;
+            font-size: 1.1rem;
             border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
         }
 
         .note-action-btn:hover {
-            background: rgba(0,0,0,0.1);
-        }
-
-        .note-action-btn.edit {
-            color: #2c5530;
-        }
-
-        .note-action-btn.delete {
-            color: #dc3545;
+            background: rgba(220,53,69,0.1);
         }
 
         .note-meta {
@@ -1161,7 +1158,6 @@
         // Add these variables
         let pendingNoteText = null;
         let pendingNoteAction = null;
-        let editingNoteId = null;
 
         // Initialize database or fallback storage
         async function initDatabase() {
@@ -1225,7 +1221,7 @@
                     // Add notes table
                     db.run(`
                         CREATE TABLE IF NOT EXISTS task_notes (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            id TEXT PRIMARY KEY,
                             task_id TEXT,
                             note_text TEXT,
                             added_by TEXT,
@@ -1589,15 +1585,11 @@
             }
             
             if (pendingNoteText && currentNoteTaskId) {
-                if (pendingNoteAction === 'add') {
-                    addTaskNote(currentNoteTaskId, pendingNoteText, authorName);
-                } else if (pendingNoteAction === 'edit') {
-                    editTaskNote(currentNoteTaskId, editingNoteId, pendingNoteText, authorName);
-                }
+                addTaskNote(currentNoteTaskId, pendingNoteText, authorName);
                 closeNoteModal();
                 closeNoteNameModal();
                 renderTasks();
-                showSystemMessage(pendingNoteAction === 'add' ? 'Note added successfully!' : 'Note updated successfully!');
+                showSystemMessage('Note added successfully!');
             }
         }
 
@@ -1648,14 +1640,15 @@
                                 if (taskNotes[taskId].length === 0) {
                                     delete taskNotes[taskId];
                                 }
+                                saveToFallbackStorage();
                             }
-                            saveToFallbackStorage();
                         } else {
                             try {
                                 db.run("DELETE FROM task_notes WHERE task_id = ? AND id = ?", [taskId, noteId]);
                                 saveDatabase();
                             } catch (error) {
                                 console.error('Error deleting task note:', error);
+                                return;
                             }
                         }
                         renderTasks();
@@ -1922,41 +1915,22 @@
                                 // Create note content
                                 const noteContent = document.createElement('div');
                                 noteContent.style.whiteSpace = 'pre-wrap';
-                                noteContent.style.paddingRight = '60px'; // Make room for action buttons
+                                noteContent.style.paddingRight = '40px'; // Make room for delete button
                                 noteContent.textContent = note.text;
                                 
                                 // Create note metadata
                                 const noteMeta = document.createElement('div');
                                 noteMeta.className = 'note-meta';
                                 noteMeta.textContent = `Added by ${note.addedBy} on ${date}`;
-                                if (note.editedBy) {
-                                    noteMeta.textContent += ` (Edited by ${note.editedBy} on ${new Date(note.editedAt).toLocaleString()})`;
-                                }
                                 
-                                // Create action buttons for admin
+                                // Create delete button for admin
                                 if (isAdminMode) {
                                     const actionDiv = document.createElement('div');
                                     actionDiv.className = 'note-actions';
                                     
-                                    // Edit button
-                                    const editBtn = document.createElement('button');
-                                    editBtn.className = 'note-action-btn edit';
-                                    editBtn.innerHTML = '✎';
-                                    editBtn.title = 'Edit Note';
-                                    editBtn.onclick = (e) => {
-                                        e.stopPropagation();
-                                        editingNoteId = note.id;
-                                        const noteModal = document.getElementById('noteModal');
-                                        const noteText = document.getElementById('noteText');
-                                        noteModal.style.display = 'block';
-                                        document.getElementById('modalOverlay').style.display = 'block';
-                                        noteText.value = note.text;
-                                        noteText.focus();
-                                    };
-                                    
                                     // Delete button
                                     const deleteBtn = document.createElement('button');
-                                    deleteBtn.className = 'note-action-btn delete';
+                                    deleteBtn.className = 'note-action-btn';
                                     deleteBtn.innerHTML = '×';
                                     deleteBtn.title = 'Delete Note';
                                     deleteBtn.onclick = (e) => {
@@ -1964,7 +1938,6 @@
                                         deleteTaskNote(taskId, note.id);
                                     };
                                     
-                                    actionDiv.appendChild(editBtn);
                                     actionDiv.appendChild(deleteBtn);
                                     noteDiv.appendChild(actionDiv);
                                 }
