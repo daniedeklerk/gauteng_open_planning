@@ -1061,12 +1061,15 @@
                 const stmt = db.prepare("SELECT member_name FROM task_assignments WHERE task_id = ?");
                 const assignments = [];
                 
-                stmt.bind({$taskId: taskId});
-                while (stmt.step()) {
-                    const row = stmt.getAsObject();
-                    assignments.push(row.member_name);
+                try {
+                    stmt.bind([taskId]);
+                    while (stmt.step()) {
+                        const row = stmt.getAsObject();
+                        assignments.push(row.member_name);
+                    }
+                } finally {
+                    stmt.free();
                 }
-                stmt.free();
                 
                 return assignments;
             }
@@ -1081,21 +1084,33 @@
                 }
                 if (!taskAssignments[taskId].includes(memberName)) {
                     taskAssignments[taskId].push(memberName);
+                    saveToFallbackStorage();
                 }
-                saveToFallbackStorage();
             } else {
-                // Check if assignment already exists
-                const stmt = db.prepare("SELECT COUNT(*) as count FROM task_assignments WHERE task_id = ? AND member_name = ?");
-                stmt.bind([taskId, memberName]);
-                
-                if (stmt.step()) {
-                    const row = stmt.getAsObject();
-                    if (row.count === 0) {
-                        db.run("INSERT INTO task_assignments (task_id, member_name) VALUES (?, ?)", [taskId, memberName]);
-                        saveDatabase(); // Save after modification
+                try {
+                    // Check if assignment already exists
+                    const stmt = db.prepare("SELECT COUNT(*) as count FROM task_assignments WHERE task_id = ? AND member_name = ?");
+                    stmt.bind([taskId, memberName]);
+                    
+                    if (stmt.step()) {
+                        const row = stmt.getAsObject();
+                        if (row.count === 0) {
+                            db.run("INSERT INTO task_assignments (task_id, member_name) VALUES (?, ?)", [taskId, memberName]);
+                            saveDatabase(); // Save after modification
+                        }
+                    }
+                    stmt.free();
+                } catch (error) {
+                    console.error('Error adding task assignment:', error);
+                    // Fallback to in-memory storage if database operation fails
+                    if (!taskAssignments[taskId]) {
+                        taskAssignments[taskId] = [];
+                    }
+                    if (!taskAssignments[taskId].includes(memberName)) {
+                        taskAssignments[taskId].push(memberName);
+                        saveToFallbackStorage();
                     }
                 }
-                stmt.free();
             }
         }
 
@@ -1337,13 +1352,12 @@
                         taskDiv.className = `task ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`;
 
                         // Create checkbox part
-                        const checkboxPart = document.createElement('div');
-                        checkboxPart.innerHTML = `
-                            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
-                        `;
-                        const checkbox = checkboxPart.querySelector('.task-checkbox');
-                        checkbox.addEventListener('change', () => toggleTask(taskId));
-                        
+                        const checkboxPart = document.createElement('input');
+                        checkboxPart.type = 'checkbox';
+                        checkboxPart.className = 'task-checkbox';
+                        checkboxPart.checked = isCompleted;
+                        checkboxPart.addEventListener('change', () => toggleTask(taskId));
+
                         // Create content part
                         const contentPart = document.createElement('div');
                         contentPart.className = 'task-content';
@@ -1364,56 +1378,34 @@
                         metaDiv.className = 'task-meta';
                         metaDiv.innerHTML = `<span class="task-deadline">Due: ${milestone.deadline}</span>`;
                         contentPart.appendChild(metaDiv);
-                        
+
+                        // Create assignees part
                         const assigneesDiv = document.createElement('div');
                         assigneesDiv.className = 'task-assignees';
-                        assignedMembers.forEach(member => {
-                            if (member) { // Only add non-empty members
-                                const span = document.createElement('span');
-                                span.className = 'task-assignee';
-                                span.textContent = member;
-                                assigneesDiv.appendChild(span);
-                            }
-                        });
-                        contentPart.appendChild(assigneesDiv);
                         
-                        // Create assignment section using direct HTML with onclick attributes
+                        if (assignedMembers && assignedMembers.length > 0) {
+                            assignedMembers.forEach(member => {
+                                if (member && member.trim() !== '') {
+                                    const assigneeTag = document.createElement('span');
+                                    assigneeTag.className = 'task-assignee';
+                                    assigneeTag.textContent = member;
+                                    assigneesDiv.appendChild(assigneeTag);
+                                }
+                            });
+                        }
+                        contentPart.appendChild(assigneesDiv);
+
+                        // Create assignment section
                         const assignSectionDiv = document.createElement('div');
+                        assignSectionDiv.className = 'assign-section';
                         
                         if (isAdminMode) {
-                            assignSectionDiv.className = 'assign-section';
-                            
-                            let assignmentHTML = '';
-                            
-                            // Add existing member selectors
-                            assignedMembers.forEach((member, index) => {
-                                if (member === '') return; // Skip empty members
-                                
-                                let optionsHTML = '';
-                                members.forEach(m => {
-                                    optionsHTML += `<option value="${m}" ${member === m ? 'selected' : ''}>${m}</option>`;
-                                });
-                                
-                                assignmentHTML += `
-                                    <div class="member-selector">
-                                        <select class="member-select" onchange="updateAssignment('${taskId}', ${index}, this.value)">
-                                            <option value="">Select Member</option>
-                                            ${optionsHTML}
-                                        </select>
-                                        <button class="remove-member-btn" onclick="removeAssignment('${taskId}', ${index})">−</button>
-                                    </div>
-                                `;
-                            });
-                            
-                            // Add the '+ Add Member' button with direct onclick attribute
-                            assignmentHTML += `
-                                <button class="add-member-btn" onclick="addAssignment('${taskId}')">+ Add Member</button>
-                            `;
-                            
-                            assignSectionDiv.innerHTML = assignmentHTML;
+                            const addButton = document.createElement('button');
+                            addButton.className = 'add-member-btn';
+                            addButton.textContent = '+ Add Member';
+                            addButton.onclick = () => addAssignment(taskId);
+                            assignSectionDiv.appendChild(addButton);
                         } else {
-                            // Non-admin view
-                            assignSectionDiv.className = 'assign-section';
                             assignSectionDiv.style.opacity = '0.5';
                             assignSectionDiv.innerHTML = `
                                 <div style="font-size: 0.8rem; color: #666; text-align: center;">
@@ -1421,9 +1413,9 @@
                                 </div>
                             `;
                         }
-                        
+
                         // Append all parts to the task div
-                        taskDiv.appendChild(checkboxPart.firstElementChild); // Just the checkbox
+                        taskDiv.appendChild(checkboxPart);
                         taskDiv.appendChild(contentPart);
                         taskDiv.appendChild(assignSectionDiv);
 
@@ -1532,14 +1524,19 @@
             const selectedMember = memberSelect.value;
             
             if (selectedMember && selectedTaskId) {
+                console.log('Adding member:', selectedMember, 'to task:', selectedTaskId);
+                
                 // Add the new member assignment
                 addTaskAssignment(selectedTaskId, selectedMember);
+                
+                // Log current assignments
+                const currentAssignments = getTaskAssignments(selectedTaskId);
+                console.log('Current assignments for task:', selectedTaskId, currentAssignments);
                 
                 // Clear the selection
                 memberSelect.value = '';
                 
                 // Update the member dropdown to remove the selected member
-                const currentAssignments = getTaskAssignments(selectedTaskId);
                 const options = Array.from(memberSelect.options);
                 
                 // Remove all options except the first one (placeholder)
