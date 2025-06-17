@@ -519,10 +519,6 @@
                 border-radius: 10px;
             }
             
-            body {
-                padding: 10px;
-            }
-            
             .modal-content {
                 width: 95%;
                 margin: 5% auto;
@@ -724,6 +720,70 @@
             color: rgba(255,255,255,0.8);
             margin-top: 5px;
         }
+
+        .task-notes {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+
+        .note-item {
+            background: #f8f9fa;
+            border-left: 3px solid #2c5530;
+            padding: 8px 12px;
+            margin: 5px 0;
+            font-size: 0.9rem;
+            border-radius: 4px;
+        }
+
+        .note-meta {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .add-note-btn {
+            background: none;
+            border: none;
+            color: #2c5530;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 5px;
+        }
+
+        .add-note-btn:hover {
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+
+        /* Note Modal Styles */
+        .note-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1001;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .note-modal textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            margin: 10px 0;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            resize: vertical;
+        }
     </style>
 </head>
 <body>
@@ -731,7 +791,7 @@
         <div class="header">
             <h1>🏆 Tournament Planning Dashboard</h1>
             <p>Bronkhorstspruit Bowling Club | Men's Pairs (July 5-6) & Men's Singles (July 12, 2025)</p>
-            <div class="version-tag">Version 1.0</div>
+            <div class="version-tag" id="versionTag">Version 1.0</div>
         </div>
 
         <div class="stats">
@@ -834,6 +894,16 @@
 
     <!-- Modal Overlay -->
     <div id="modalOverlay" class="modal-overlay"></div>
+
+    <!-- Note Modal -->
+    <div id="noteModal" class="note-modal">
+        <h3>Add Note</h3>
+        <textarea id="noteText" placeholder="Enter your note here..."></textarea>
+        <div class="member-modal-buttons">
+            <button onclick="confirmAddNote()">Add Note</button>
+            <button onclick="closeNoteModal()">Cancel</button>
+        </div>
+    </div>
 
     <button class="floating-action" onclick="scrollToTop()" title="Back to Top">↑</button>
 
@@ -1020,6 +1090,8 @@
         let taskAssignments = {}; // taskId: [member1, member2, ...]
         let taskCompletions = {}; // taskId: {isCompleted, completedBy, completedAt}
         let collapsedMilestones = {}; // milestoneId: boolean
+        let taskNotes = {};
+        let currentNoteTaskId = null;
 
         // Admin password
         const adminPassword = "bowls2025danie";
@@ -1083,6 +1155,17 @@
                         );
                     `);
                     
+                    // Add notes table
+                    db.run(`
+                        CREATE TABLE IF NOT EXISTS task_notes (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            task_id TEXT,
+                            note_text TEXT,
+                            added_by TEXT,
+                            added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        );
+                    `);
+                    
                     // Migrate data from fallback storage if needed
                     migrateFromFallbackIfNeeded();
                     
@@ -1106,15 +1189,18 @@
                 const assignments = sessionStorage.getItem('taskAssignments');
                 const completions = sessionStorage.getItem('taskCompletions');
                 const collapsed = sessionStorage.getItem('collapsedMilestones');
+                const notes = sessionStorage.getItem('taskNotes');
                 
                 if (assignments) taskAssignments = JSON.parse(assignments);
                 if (completions) taskCompletions = JSON.parse(completions);
                 if (collapsed) collapsedMilestones = JSON.parse(collapsed);
+                if (notes) taskNotes = JSON.parse(notes);
             } catch (e) {
                 // Start with empty data if parsing fails
                 taskAssignments = {};
                 taskCompletions = {};
                 collapsedMilestones = {};
+                taskNotes = {};
             }
         }
 
@@ -1123,6 +1209,7 @@
                 sessionStorage.setItem('taskAssignments', JSON.stringify(taskAssignments));
                 sessionStorage.setItem('taskCompletions', JSON.stringify(taskCompletions));
                 sessionStorage.setItem('collapsedMilestones', JSON.stringify(collapsedMilestones));
+                sessionStorage.setItem('taskNotes', JSON.stringify(taskNotes));
             } catch (e) {
                 console.log('Session storage not available');
             }
@@ -1317,6 +1404,111 @@
             }
         }
 
+        function getTaskNotes(taskId) {
+            if (useFallbackStorage) {
+                return taskNotes[taskId] || [];
+            } else {
+                try {
+                    const stmt = db.prepare("SELECT * FROM task_notes WHERE task_id = ? ORDER BY added_at DESC");
+                    stmt.bind([taskId]);
+                    
+                    const notes = [];
+                    while (stmt.step()) {
+                        const row = stmt.getAsObject();
+                        notes.push({
+                            text: row.note_text,
+                            addedBy: row.added_by,
+                            addedAt: row.added_at
+                        });
+                    }
+                    stmt.free();
+                    return notes;
+                } catch (error) {
+                    console.error('Error getting task notes:', error);
+                    return [];
+                }
+            }
+        }
+
+        function addTaskNote(taskId, noteText, addedBy) {
+            const timestamp = new Date().toISOString();
+            
+            if (useFallbackStorage) {
+                if (!taskNotes[taskId]) {
+                    taskNotes[taskId] = [];
+                }
+                taskNotes[taskId].unshift({
+                    text: noteText,
+                    addedBy: addedBy,
+                    addedAt: timestamp
+                });
+                saveToFallbackStorage();
+            } else {
+                try {
+                    db.run(`
+                        INSERT INTO task_notes (task_id, note_text, added_by, added_at)
+                        VALUES (?, ?, ?, ?)
+                    `, [taskId, noteText, addedBy, timestamp]);
+                    saveDatabase();
+                } catch (error) {
+                    console.error('Error adding task note:', error);
+                    // Fallback to in-memory storage
+                    if (!taskNotes[taskId]) {
+                        taskNotes[taskId] = [];
+                    }
+                    taskNotes[taskId].unshift({
+                        text: noteText,
+                        addedBy: addedBy,
+                        addedAt: timestamp
+                    });
+                    saveToFallbackStorage();
+                }
+            }
+        }
+
+        function showAddNoteModal(taskId) {
+            currentNoteTaskId = taskId;
+            const modal = document.getElementById('noteModal');
+            const overlay = document.getElementById('modalOverlay');
+            const noteText = document.getElementById('noteText');
+            
+            modal.style.display = 'block';
+            overlay.style.display = 'block';
+            noteText.value = '';
+            noteText.focus();
+        }
+
+        function closeNoteModal() {
+            const modal = document.getElementById('noteModal');
+            const overlay = document.getElementById('modalOverlay');
+            modal.style.display = 'none';
+            overlay.style.display = 'none';
+            document.getElementById('noteText').value = '';
+            currentNoteTaskId = null;
+        }
+
+        function confirmAddNote() {
+            const noteText = document.getElementById('noteText').value.trim();
+            
+            if (!noteText) {
+                showSystemMessage('Please enter a note.');
+                return;
+            }
+            
+            if (currentNoteTaskId) {
+                // Prompt for name when adding a note
+                const addedBy = prompt('Please enter your name:');
+                if (addedBy && addedBy.trim()) {
+                    addTaskNote(currentNoteTaskId, noteText, addedBy.trim());
+                    closeNoteModal();
+                    renderTasks();
+                    showSystemMessage('Note added successfully!');
+                } else {
+                    showSystemMessage('Please enter your name to add the note.');
+                }
+            }
+        }
+
         // Save database to localStorage
         function saveDatabase() {
             if (!useFallbackStorage && db) {
@@ -1342,6 +1534,7 @@
                 const assignments = sessionStorage.getItem('taskAssignments');
                 const completions = sessionStorage.getItem('taskCompletions');
                 const collapsed = sessionStorage.getItem('collapsedMilestones');
+                const notes = sessionStorage.getItem('taskNotes');
                 
                 if (assignments) {
                     const assignData = JSON.parse(assignments);
@@ -1373,10 +1566,23 @@
                     }
                 }
                 
+                if (notes) {
+                    const noteData = JSON.parse(notes);
+                    for (const taskId in noteData) {
+                        noteData[taskId].forEach(note => {
+                            db.run(
+                                "INSERT INTO task_notes (task_id, note_text, added_by) VALUES (?, ?, ?)",
+                                [taskId, note.text, note.addedBy]
+                            );
+                        });
+                    }
+                }
+                
                 // Clear session storage after migration
                 sessionStorage.removeItem('taskAssignments');
                 sessionStorage.removeItem('taskCompletions');
                 sessionStorage.removeItem('collapsedMilestones');
+                sessionStorage.removeItem('taskNotes');
             } catch (e) {
                 console.error('Error migrating data from fallback storage:', e);
             }
@@ -1387,6 +1593,7 @@
         // Initialize the application
         async function init() {
             await initDatabase();
+            await updateVersionTag();
             populateMemberFilter();
             renderTasks();
             updateStats();
@@ -1720,6 +1927,14 @@
                 nameInput.value = ''; // Clear any previous value
                 nameInput.focus();
             } else {
+                // Only allow admin to mark as incomplete
+                if (!isAdminMode) {
+                    showSystemMessage('Only administrators can mark tasks as incomplete.');
+                    // Reset checkbox state
+                    event.target.checked = true;
+                    return;
+                }
+                
                 // Task is being unmarked - confirm action
                 if (confirm("Are you sure you want to mark this task as incomplete?")) {
                     setTaskCompletion(taskId, false);
@@ -1727,8 +1942,7 @@
                     updateStats();
                 } else {
                     // User cancelled - keep it checked
-                    const checkbox = event.target;
-                    checkbox.checked = true;
+                    event.target.checked = true;
                 }
             }
         }
@@ -1916,6 +2130,22 @@
             
             modal.style.display = 'none';
             overlay.style.display = 'none';
+        }
+
+        // Add this function to your JavaScript
+        async function updateVersionTag() {
+            try {
+                const response = await fetch('https://api.github.com/repos/dmnde/gauteng_open_planning/commits/main');
+                if (response.ok) {
+                    const data = await response.json();
+                    const shortHash = data.sha.substring(0, 7);
+                    const date = new Date(data.commit.author.date).toLocaleDateString();
+                    document.getElementById('versionTag').textContent = `Version 1.0 (${date} - ${shortHash})`;
+                }
+            } catch (error) {
+                console.error('Error fetching version:', error);
+                // Keep the default version if there's an error
+            }
         }
 
         // Initialize on page load
