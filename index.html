@@ -295,6 +295,29 @@
             border-radius: 15px;
             font-size: 0.8rem;
             font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            margin: 2px;
+        }
+
+        .task-assignee .remove-tag {
+            margin-left: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .task-assignee .remove-tag:hover {
+            opacity: 1;
+            background: rgba(255,255,255,0.3);
         }
 
         .task-deadline {
@@ -1115,17 +1138,31 @@
         }
 
         function removeTaskAssignment(taskId, memberName) {
+            if (!isAdminMode) return;
+            
             if (useFallbackStorage) {
                 if (taskAssignments[taskId]) {
                     taskAssignments[taskId] = taskAssignments[taskId].filter(name => name !== memberName);
                     if (taskAssignments[taskId].length === 0) {
                         delete taskAssignments[taskId];
                     }
+                    saveToFallbackStorage();
                 }
-                saveToFallbackStorage();
             } else {
-                db.run("DELETE FROM task_assignments WHERE task_id = ? AND member_name = ?", [taskId, memberName]);
-                saveDatabase(); // Save after modification
+                try {
+                    db.run("DELETE FROM task_assignments WHERE task_id = ? AND member_name = ?", [taskId, memberName]);
+                    saveDatabase();
+                } catch (error) {
+                    console.error('Error removing task assignment:', error);
+                    // Fallback to in-memory storage if database operation fails
+                    if (taskAssignments[taskId]) {
+                        taskAssignments[taskId] = taskAssignments[taskId].filter(name => name !== memberName);
+                        if (taskAssignments[taskId].length === 0) {
+                            delete taskAssignments[taskId];
+                        }
+                        saveToFallbackStorage();
+                    }
+                }
             }
         }
 
@@ -1384,11 +1421,33 @@
                         assigneesDiv.className = 'task-assignees';
                         
                         if (assignedMembers && assignedMembers.length > 0) {
-                            assignedMembers.forEach(member => {
+                            assignedMembers.forEach((member, index) => {
                                 if (member && member.trim() !== '') {
                                     const assigneeTag = document.createElement('span');
                                     assigneeTag.className = 'task-assignee';
-                                    assigneeTag.textContent = member;
+                                    
+                                    // Add member name
+                                    const memberText = document.createElement('span');
+                                    memberText.textContent = member;
+                                    assigneeTag.appendChild(memberText);
+                                    
+                                    // Add remove button if in admin mode
+                                    if (isAdminMode) {
+                                        const removeBtn = document.createElement('span');
+                                        removeBtn.className = 'remove-tag';
+                                        removeBtn.innerHTML = '×';
+                                        removeBtn.title = 'Remove member';
+                                        removeBtn.onclick = (e) => {
+                                            e.stopPropagation(); // Prevent event bubbling
+                                            if (confirm(`Remove ${member} from this task?`)) {
+                                                removeTaskAssignment(taskId, member);
+                                                renderTasks();
+                                                updateStats();
+                                            }
+                                        };
+                                        assigneeTag.appendChild(removeBtn);
+                                    }
+                                    
                                     assigneesDiv.appendChild(assigneeTag);
                                 }
                             });
