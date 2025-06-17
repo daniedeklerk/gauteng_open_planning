@@ -1691,10 +1691,7 @@
                             }
                         } else {
                             try {
-                                const stmt = db.prepare("DELETE FROM task_notes WHERE task_id = ? AND id = ?");
-                                stmt.bind([taskId, noteId]);
-                                stmt.step();
-                                stmt.free();
+                                db.run("DELETE FROM task_notes WHERE task_id = ? AND id = ?", [taskId, noteId]);
                                 deleted = true;
                                 saveDatabase();
                             } catch (error) {
