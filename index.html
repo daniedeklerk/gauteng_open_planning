@@ -837,6 +837,8 @@
             <div class="version-tag" id="versionTag">Version 1.0</div>
         </div>
 
+        <div id="assignmentsDebug" style="color: #c00; font-size: 1rem; margin: 10px 0;"></div>
+
         <div class="stats">
             <div class="stat-card">
                 <div class="stat-number" id="totalTasks">0</div>
@@ -1847,6 +1849,12 @@
             const debugDiv = document.getElementById('memberFilterDebug');
             if (debugDiv) {
                 debugDiv.textContent = 'Selected member filter: ' + (memberFilter || '[none]');
+            }
+
+            // Show debug message for assignments
+            const assignmentsDebugDiv = document.getElementById('assignmentsDebug');
+            if (assignmentsDebugDiv) {
+                assignmentsDebugDiv.textContent = 'Assignments: ' + JSON.stringify(taskAssignments);
             }
 
             content.innerHTML = '';
