@@ -196,21 +196,14 @@
             background: white;
             padding: 25px;
             overflow: hidden;
-            transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
-            max-height: 2000px; /* Adjust this value based on your content */
-            opacity: 1;
+            transition: all 0.3s ease;
+            height: auto;
         }
 
         .milestone-content.collapsed {
-            max-height: 0;
-            padding-top: 0;
-            padding-bottom: 0;
+            height: 0;
+            padding: 0;
             opacity: 0;
-        }
-
-        .milestone-content.expanded {
-            max-height: 2000px; /* Should match the value above */
-            opacity: 1;
         }
 
         .milestone-1 { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
@@ -2208,7 +2201,6 @@
         }
 
         function toggleMilestone(milestoneId) {
-            const isCollapsed = getMilestoneCollapsed(milestoneId);
             const milestone = document.querySelector(`.milestone-${milestoneId}`);
             if (!milestone) return;
             
@@ -2216,21 +2208,20 @@
             const content = milestone.querySelector('.milestone-content');
             if (!toggle || !content) return;
             
-            // Toggle the state
-            const newCollapsedState = !isCollapsed;
+            const isCollapsed = content.classList.contains('collapsed');
             
             // Update the database/storage
-            setMilestoneCollapsed(milestoneId, newCollapsedState);
+            setMilestoneCollapsed(milestoneId, !isCollapsed);
             
             // Update the UI
-            if (newCollapsedState) {
-                toggle.classList.add('collapsed');
-                content.classList.remove('expanded');
-                content.classList.add('collapsed');
-            } else {
+            if (isCollapsed) {
+                // Expanding
                 toggle.classList.remove('collapsed');
                 content.classList.remove('collapsed');
-                content.classList.add('expanded');
+            } else {
+                // Collapsing
+                toggle.classList.add('collapsed');
+                content.classList.add('collapsed');
             }
         }
 
@@ -2249,12 +2240,10 @@
                 // Update the UI
                 if (collapse) {
                     toggle.classList.add('collapsed');
-                    content.classList.remove('expanded');
                     content.classList.add('collapsed');
                 } else {
                     toggle.classList.remove('collapsed');
                     content.classList.remove('collapsed');
-                    content.classList.add('expanded');
                 }
             });
         }
