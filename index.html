@@ -1892,13 +1892,28 @@
                         const isOverdue = !isCompleted && new Date() > new Date(milestone.deadline);
 
                         // Apply filters
-                        if (memberFilter && !assignedMembers.map(m => m.trim().toLowerCase()).includes(memberFilter.trim().toLowerCase())) return;
+                        let memberFilterDebugMsg = '';
+                        if (memberFilter) {
+                            const normalizedAssigned = assignedMembers.map(m => m.trim().toLowerCase());
+                            const normalizedSelected = memberFilter.trim().toLowerCase();
+                            memberFilterDebugMsg = `Assigned: [${normalizedAssigned.join(', ')}], Selected: ${normalizedSelected}`;
+                            if (!normalizedAssigned.includes(normalizedSelected)) return;
+                        }
                         if (statusFilter === 'completed' && !isCompleted) return;
                         if (statusFilter === 'pending' && isCompleted) return;
                         if (statusFilter === 'overdue' && !isOverdue) return;
 
                         const taskDiv = document.createElement('div');
                         taskDiv.className = `task ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`;
+
+                        // Debug info for member filter
+                        if (memberFilter && memberFilterDebugMsg) {
+                            const debugInfo = document.createElement('div');
+                            debugInfo.style.color = '#c00';
+                            debugInfo.style.fontSize = '0.9rem';
+                            debugInfo.textContent = memberFilterDebugMsg;
+                            taskDiv.appendChild(debugInfo);
+                        }
 
                         // Create checkbox part
                         const checkboxPart = document.createElement('input');
