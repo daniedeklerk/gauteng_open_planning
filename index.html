@@ -903,6 +903,8 @@
                 <button class="btn btn-primary" onclick="exportProgress()">📊 Export Progress</button>
                 <button class="btn btn-secondary" onclick="clearFilters()">🔄 Clear Filters</button>
                 <button class="btn btn-primary" onclick="markAllComplete()" ${!isAdminMode ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>✅ Mark Milestone Complete</button>
+                <button class="btn btn-secondary" onclick="toggleAllMilestones(false)">🔽 Expand All</button>
+                <button class="btn btn-secondary" onclick="toggleAllMilestones(true)">🔼 Collapse All</button>
             </div>
         </div>
 
@@ -2208,14 +2210,20 @@
         function toggleMilestone(milestoneId) {
             const isCollapsed = getMilestoneCollapsed(milestoneId);
             const milestone = document.querySelector(`.milestone-${milestoneId}`);
+            if (!milestone) return;
+            
             const toggle = milestone.querySelector('.milestone-toggle');
             const content = milestone.querySelector('.milestone-content');
+            if (!toggle || !content) return;
+            
+            // Toggle the state
+            const newCollapsedState = !isCollapsed;
             
             // Update the database/storage
-            setMilestoneCollapsed(milestoneId, !isCollapsed);
+            setMilestoneCollapsed(milestoneId, newCollapsedState);
             
             // Update the UI
-            if (!isCollapsed) {
+            if (newCollapsedState) {
                 toggle.classList.add('collapsed');
                 content.classList.remove('expanded');
                 content.classList.add('collapsed');
@@ -2226,135 +2234,55 @@
             }
         }
 
-        function toggleTask(taskId) {
-            const completion = getTaskCompletion(taskId);
-            const isCurrentlyCompleted = completion.isCompleted;
-            
-            if (!isCurrentlyCompleted) {
-                // Task is being marked as complete - ask for name
-                currentTaskId = taskId;
-                const modal = document.getElementById('completionModal');
-                const nameInput = document.getElementById('completionName');
-                modal.style.display = 'block';
-                document.getElementById('modalOverlay').style.display = 'block';
-                nameInput.value = ''; // Clear any previous value
-                nameInput.focus();
-            } else {
-                // Only allow admin to mark as incomplete
-                if (!isAdminMode) {
-                    showSystemMessage('Only administrators can mark tasks as incomplete.');
-                    // Reset checkbox state
-                    event.target.checked = true;
-                    return;
-                }
-                
-                // Show confirmation dialog
-                showConfirmationDialog(
-                    "Are you sure you want to mark this task as incomplete?",
-                    event.target,
-                    (confirmed) => {
-                        if (confirmed) {
-                            setTaskCompletion(taskId, false);
-                            renderTasks();
-                            updateStats();
-                        } else {
-                            // User cancelled - keep it checked
-                            event.target.checked = true;
-                        }
-                    }
-                );
-            }
-        }
-
-        function closeCompletionModal() {
-            const modal = document.getElementById('completionModal');
-            const overlay = document.getElementById('modalOverlay');
-            modal.style.display = 'none';
-            overlay.style.display = 'none';
-            document.getElementById('completionName').value = '';
-            
-            // Uncheck the checkbox if modal was cancelled
-            if (currentTaskId) {
-                renderTasks(); // Re-render to ensure correct checkbox state
-            }
-            currentTaskId = null;
-        }
-
-        function confirmCompletion() {
-            const completedBy = document.getElementById('completionName').value.trim();
-            
-            if (!completedBy) {
-                showSystemMessage('Please enter your name to confirm completion.');
-                return;
-            }
-            
-            if (currentTaskId) {
-                setTaskCompletion(currentTaskId, true, completedBy);
-                const modal = document.getElementById('completionModal');
-                const overlay = document.getElementById('modalOverlay');
-                modal.style.display = 'none';
-                overlay.style.display = 'none';
-                document.getElementById('completionName').value = '';
-                currentTaskId = null;
-                
-                // Update UI
-                renderTasks();
-                updateStats();
-                
-                // Show confirmation
-                showSystemMessage('Task marked as complete!');
-            }
-        }
-
-        function toggleAdminMode() {
-            const passwordInput = document.getElementById('adminPassword');
-            const adminBtn = document.getElementById('adminBtn');
-            
-            if (!isAdminMode) {
-                if (passwordInput.value === adminPassword) {
-                    isAdminMode = true;
-                    adminBtn.textContent = 'Disable Admin';
-                    adminBtn.className = 'btn btn-secondary';
-                    passwordInput.style.display = 'none';
-                    renderTasks();
-                    showSystemMessage('Admin mode enabled! You can now assign tasks.');
-                } else {
-                    showSystemMessage('Incorrect password. Please try again.');
-                    passwordInput.value = '';
-                }
-            } else {
-                isAdminMode = false;
-                adminBtn.textContent = 'Enable Admin';
-                adminBtn.className = 'btn btn-primary';
-                passwordInput.style.display = 'block';
-                passwordInput.value = '';
-                renderTasks();
-                showSystemMessage('Admin mode disabled.');
-            }
-        }
-
-        function updateStats() {
-            let total = 0, completed = 0, overdue = 0;
-
+        function toggleAllMilestones(collapse = false) {
             milestones.forEach(milestone => {
-                milestone.sections.forEach(section => {
-                    section.tasks.forEach((task, taskIndex) => {
-                        const taskId = `${milestone.id}-${section.title}-${taskIndex}`;
-                        const completion = getTaskCompletion(taskId);
-                        total++;
-                        if (completion.isCompleted) {
-                            completed++;
-                        } else if (new Date() > new Date(milestone.deadline)) {
-                            overdue++;
-                        }
-                    });
-                });
+                const milestoneElement = document.querySelector(`.milestone-${milestone.id}`);
+                if (!milestoneElement) return;
+                
+                const toggle = milestoneElement.querySelector('.milestone-toggle');
+                const content = milestoneElement.querySelector('.milestone-content');
+                if (!toggle || !content) return;
+                
+                // Update the database/storage
+                setMilestoneCollapsed(milestone.id, collapse);
+                
+                // Update the UI
+                if (collapse) {
+                    toggle.classList.add('collapsed');
+                    content.classList.remove('expanded');
+                    content.classList.add('collapsed');
+                } else {
+                    toggle.classList.remove('collapsed');
+                    content.classList.remove('collapsed');
+                    content.classList.add('expanded');
+                }
             });
+        }
 
-            document.getElementById('totalTasks').textContent = total;
-            document.getElementById('completedTasks').textContent = completed;
-            document.getElementById('pendingTasks').textContent = total - completed;
-            document.getElementById('overdueTasks').textContent = overdue;
+        function toggleTask(taskId) {
+            const task = document.querySelector(`.task-${taskId}`);
+            if (!task) return;
+            
+            const checkbox = task.querySelector('.task-checkbox');
+            const content = task.querySelector('.task-content');
+            const assignSection = task.querySelector('.assign-section');
+            
+            // Toggle the state
+            const newCompletedState = !checkbox.checked;
+            
+            // Update the database/storage
+            setTaskCompletion(taskId, newCompletedState);
+            
+            // Update the UI
+            if (newCompletedState) {
+                checkbox.checked = true;
+                content.classList.add('completed');
+                assignSection.style.opacity = '0.5';
+            } else {
+                checkbox.checked = false;
+                content.classList.remove('completed');
+                assignSection.style.opacity = '1';
+            }
         }
 
         function clearFilters() {
