@@ -1257,52 +1257,123 @@
                         const taskDiv = document.createElement('div');
                         taskDiv.className = `task ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`;
 
-                        const completedByText = completion.completedBy && isCompleted ? 
-                            `<div class="completed-by">✓ Completed by: ${completion.completedBy}</div>` : '';
-
-                        const assigneeElements = assignedMembers.map(member => 
-                            `<span class="task-assignee">${member}</span>`
-                        ).join('');
-
+                        // Create checkbox part
+                        const checkboxPart = document.createElement('div');
+                        checkboxPart.innerHTML = `
+                            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
+                        `;
+                        const checkbox = checkboxPart.querySelector('.task-checkbox');
+                        checkbox.addEventListener('change', () => toggleTask(taskId));
+                        
+                        // Create content part
+                        const contentPart = document.createElement('div');
+                        contentPart.className = 'task-content';
+                        
+                        const titleDiv = document.createElement('div');
+                        titleDiv.className = 'task-title';
+                        titleDiv.textContent = task;
+                        contentPart.appendChild(titleDiv);
+                        
+                        if (completion.completedBy && isCompleted) {
+                            const completedByDiv = document.createElement('div');
+                            completedByDiv.className = 'completed-by';
+                            completedByDiv.innerHTML = `✓ Completed by: ${completion.completedBy}`;
+                            contentPart.appendChild(completedByDiv);
+                        }
+                        
+                        const metaDiv = document.createElement('div');
+                        metaDiv.className = 'task-meta';
+                        metaDiv.innerHTML = `<span class="task-deadline">Due: ${milestone.deadline}</span>`;
+                        contentPart.appendChild(metaDiv);
+                        
+                        const assigneesDiv = document.createElement('div');
+                        assigneesDiv.className = 'task-assignees';
+                        assignedMembers.forEach(member => {
+                            if (member) { // Only add non-empty members
+                                const span = document.createElement('span');
+                                span.className = 'task-assignee';
+                                span.textContent = member;
+                                assigneesDiv.appendChild(span);
+                            }
+                        });
+                        contentPart.appendChild(assigneesDiv);
+                        
                         // Create assignment section
-                        const assignmentSection = isAdminMode ? `
-                            <div class="assign-section">
-                                ${assignedMembers.map((member, index) => `
-                                    <div class="member-selector">
-                                        <select class="member-select" onchange="updateAssignment('${taskId}', ${index}, this.value)">
-                                            <option value="">Select Member</option>
-                                            ${members.map(m => 
-                                                `<option value="${m}" ${member === m ? 'selected' : ''}>${m}</option>`
-                                            ).join('')}
-                                        </select>
-                                        <button class="remove-member-btn" onclick="removeAssignment('${taskId}', ${index})">−</button>
-                                    </div>
-                                `).join('')}
-                                <button class="add-member-btn" onclick="addAssignment('${taskId}')">+ Add Member</button>
-                            </div>
-                        ` : `
-                            <div class="assign-section" style="opacity: 0.5;">
+                        const assignSectionDiv = document.createElement('div');
+                        
+                        if (isAdminMode) {
+                            assignSectionDiv.className = 'assign-section';
+                            
+                            // Add existing member selectors
+                            assignedMembers.forEach((member, index) => {
+                                if (member === '') return; // Skip empty members
+                                
+                                const memberSelectorDiv = document.createElement('div');
+                                memberSelectorDiv.className = 'member-selector';
+                                
+                                const select = document.createElement('select');
+                                select.className = 'member-select';
+                                
+                                // Empty option
+                                const emptyOption = document.createElement('option');
+                                emptyOption.value = '';
+                                emptyOption.textContent = 'Select Member';
+                                select.appendChild(emptyOption);
+                                
+                                // Add all member options
+                                members.forEach(m => {
+                                    const option = document.createElement('option');
+                                    option.value = m;
+                                    option.textContent = m;
+                                    if (m === member) {
+                                        option.selected = true;
+                                    }
+                                    select.appendChild(option);
+                                });
+                                
+                                // Set up change handler
+                                select.addEventListener('change', function() {
+                                    updateAssignment(taskId, index, this.value);
+                                });
+                                
+                                memberSelectorDiv.appendChild(select);
+                                
+                                // Remove button
+                                const removeBtn = document.createElement('button');
+                                removeBtn.className = 'remove-member-btn';
+                                removeBtn.textContent = '−';
+                                removeBtn.addEventListener('click', () => {
+                                    removeAssignment(taskId, index);
+                                });
+                                
+                                memberSelectorDiv.appendChild(removeBtn);
+                                assignSectionDiv.appendChild(memberSelectorDiv);
+                            });
+                            
+                            // Add the '+ Add Member' button
+                            const addBtn = document.createElement('button');
+                            addBtn.className = 'add-member-btn';
+                            addBtn.textContent = '+ Add Member';
+                            addBtn.addEventListener('click', () => {
+                                addAssignment(taskId);
+                            });
+                            
+                            assignSectionDiv.appendChild(addBtn);
+                        } else {
+                            // Non-admin view
+                            assignSectionDiv.className = 'assign-section';
+                            assignSectionDiv.style.opacity = '0.5';
+                            assignSectionDiv.innerHTML = `
                                 <div style="font-size: 0.8rem; color: #666; text-align: center;">
                                     Admin mode required<br>for assignments
                                 </div>
-                            </div>
-                        `;
-
-                        taskDiv.innerHTML = `
-                            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} 
-                                   onchange="toggleTask('${taskId}')">
-                            <div class="task-content">
-                                <div class="task-title">${task}</div>
-                                ${completedByText}
-                                <div class="task-meta">
-                                    <span class="task-deadline">Due: ${milestone.deadline}</span>
-                                </div>
-                                <div class="task-assignees">
-                                    ${assigneeElements}
-                                </div>
-                            </div>
-                            ${assignmentSection}
-                        `;
+                            `;
+                        }
+                        
+                        // Append all parts to the task div
+                        taskDiv.appendChild(checkboxPart.firstElementChild); // Just the checkbox
+                        taskDiv.appendChild(contentPart);
+                        taskDiv.appendChild(assignSectionDiv);
 
                         sectionDiv.appendChild(taskDiv);
                         sectionHasTasks = true;
@@ -1367,6 +1438,15 @@
             addTaskAssignment(taskId, '');
             renderTasks();
             updateStats();
+            
+            // Force focus on the newly added dropdown
+            setTimeout(() => {
+                const selects = document.querySelectorAll(`.task select.member-select`);
+                if (selects.length > 0) {
+                    const lastSelect = selects[selects.length - 1];
+                    lastSelect.focus();
+                }
+            }, 100);
         }
         
         function updateAssignment(taskId, index, newMember) {
