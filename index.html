@@ -676,6 +676,28 @@
             <p>Please enter your name to confirm task completion:</p>
             <input type="text" id="completionName" class="modal-input" placeholder="Enter your full name">
             <div class="modal-buttons">
+                <button onclick="confirmCompletion()">Confirm</button>
+                <button onclick="closeCompletionModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Member selection modal -->
+    <div id="memberModal" class="member-modal">
+        <h3>Select Member</h3>
+        <select id="memberSelect">
+            <option value="">Select Member</option>
+        </select>
+        <div class="member-modal-buttons">
+            <button onclick="confirmMemberSelection()">Add</button>
+            <button onclick="closeMemberModal()">Cancel</button>
+        </div>
+    </div>
+    <div id="modalOverlay" class="modal-overlay"></div>
+            <div class="modal-header">Task Completion</div>
+            <p>Please enter your name to confirm task completion:</p>
+            <input type="text" id="completionName" class="modal-input" placeholder="Enter your full name">
+            <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeCompletionModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="confirmCompletion()">Confirm</button>
             </div>
@@ -1298,67 +1320,40 @@
                         });
                         contentPart.appendChild(assigneesDiv);
                         
-                        // Create assignment section
+                        // Create assignment section using direct HTML with onclick attributes
                         const assignSectionDiv = document.createElement('div');
                         
                         if (isAdminMode) {
                             assignSectionDiv.className = 'assign-section';
                             
+                            let assignmentHTML = '';
+                            
                             // Add existing member selectors
                             assignedMembers.forEach((member, index) => {
                                 if (member === '') return; // Skip empty members
                                 
-                                const memberSelectorDiv = document.createElement('div');
-                                memberSelectorDiv.className = 'member-selector';
-                                
-                                const select = document.createElement('select');
-                                select.className = 'member-select';
-                                
-                                // Empty option
-                                const emptyOption = document.createElement('option');
-                                emptyOption.value = '';
-                                emptyOption.textContent = 'Select Member';
-                                select.appendChild(emptyOption);
-                                
-                                // Add all member options
+                                let optionsHTML = '';
                                 members.forEach(m => {
-                                    const option = document.createElement('option');
-                                    option.value = m;
-                                    option.textContent = m;
-                                    if (m === member) {
-                                        option.selected = true;
-                                    }
-                                    select.appendChild(option);
+                                    optionsHTML += `<option value="${m}" ${member === m ? 'selected' : ''}>${m}</option>`;
                                 });
                                 
-                                // Set up change handler
-                                select.addEventListener('change', function() {
-                                    updateAssignment(taskId, index, this.value);
-                                });
-                                
-                                memberSelectorDiv.appendChild(select);
-                                
-                                // Remove button
-                                const removeBtn = document.createElement('button');
-                                removeBtn.className = 'remove-member-btn';
-                                removeBtn.textContent = '−';
-                                removeBtn.addEventListener('click', () => {
-                                    removeAssignment(taskId, index);
-                                });
-                                
-                                memberSelectorDiv.appendChild(removeBtn);
-                                assignSectionDiv.appendChild(memberSelectorDiv);
+                                assignmentHTML += `
+                                    <div class="member-selector">
+                                        <select class="member-select" onchange="updateAssignment('${taskId}', ${index}, this.value)">
+                                            <option value="">Select Member</option>
+                                            ${optionsHTML}
+                                        </select>
+                                        <button class="remove-member-btn" onclick="removeAssignment('${taskId}', ${index})">−</button>
+                                    </div>
+                                `;
                             });
                             
-                            // Add the '+ Add Member' button
-                            const addBtn = document.createElement('button');
-                            addBtn.className = 'add-member-btn';
-                            addBtn.textContent = '+ Add Member';
-                            addBtn.addEventListener('click', () => {
-                                addAssignment(taskId);
-                            });
+                            // Add the '+ Add Member' button with direct onclick attribute
+                            assignmentHTML += `
+                                <button class="add-member-btn" onclick="addAssignment('${taskId}')">+ Add Member</button>
+                            `;
                             
-                            assignSectionDiv.appendChild(addBtn);
+                            assignSectionDiv.innerHTML = assignmentHTML;
                         } else {
                             // Non-admin view
                             assignSectionDiv.className = 'assign-section';
@@ -1399,15 +1394,58 @@
             }
         }
 
+        // Shared variable for task assignment
+        let selectedTaskId = null;
+
         function addAssignment(taskId) {
+            console.log('addAssignment called for task:', taskId);
             if (!isAdminMode) {
                 alert('Only admin can assign tasks. Please enable admin mode first.');
                 return;
             }
             
-            // Add a placeholder assignment that will be updated when user selects a member
-            addTaskAssignment(taskId, '');
-            renderTasks();
+            selectedTaskId = taskId;
+            
+            // Populate member select dropdown
+            const memberSelect = document.getElementById('memberSelect');
+            memberSelect.innerHTML = '<option value="">Select Member</option>';
+            members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member;
+                option.textContent = member;
+                memberSelect.appendChild(option);
+            });
+            
+            // Show the modal
+            const memberModal = document.getElementById('memberModal');
+            const modalOverlay = document.getElementById('modalOverlay');
+            
+            if (memberModal && modalOverlay) {
+                memberModal.style.display = 'block';
+                modalOverlay.style.display = 'block';
+                console.log('Member selection modal displayed');
+            } else {
+                console.error('Member modal elements not found');
+            }
+        }
+
+        function closeMemberModal() {
+            document.getElementById('memberModal').style.display = 'none';
+            document.getElementById('modalOverlay').style.display = 'none';
+            selectedTaskId = null;
+        }
+
+        function confirmMemberSelection() {
+            const memberSelect = document.getElementById('memberSelect');
+            const selectedMember = memberSelect.value;
+            
+            if (selectedMember && selectedTaskId) {
+                addTaskAssignment(selectedTaskId, selectedMember);
+                renderTasks();
+                closeMemberModal();
+            } else {
+                alert('Please select a member');
+            }
         }
 
         function updateAssignment(taskId, index, newMember) {
@@ -1429,24 +1467,22 @@
         }
 
         function addAssignment(taskId) {
+            console.log('addAssignment called for task:', taskId);
+            
             if (!isAdminMode) {
                 alert('Only admin can assign tasks. Please enable admin mode first.');
                 return;
             }
             
             // Add a placeholder assignment that will be updated when user selects a member
-            addTaskAssignment(taskId, '');
-            renderTasks();
-            updateStats();
-            
-            // Force focus on the newly added dropdown
-            setTimeout(() => {
-                const selects = document.querySelectorAll(`.task select.member-select`);
-                if (selects.length > 0) {
-                    const lastSelect = selects[selects.length - 1];
-                    lastSelect.focus();
-                }
-            }, 100);
+            if (taskId) {
+                addTaskAssignment(taskId, '');
+                console.log('Task assignment added for:', taskId);
+                renderTasks();
+                updateStats();
+            } else {
+                console.error('No taskId provided to addAssignment');
+            }
         }
         
         function updateAssignment(taskId, index, newMember) {
