@@ -1086,7 +1086,7 @@
             } else {
                 // Check if assignment already exists
                 const stmt = db.prepare("SELECT COUNT(*) as count FROM task_assignments WHERE task_id = ? AND member_name = ?");
-                stmt.bind({$taskId: taskId, $memberName: memberName});
+                stmt.bind([taskId, memberName]);
                 
                 if (stmt.step()) {
                     const row = stmt.getAsObject();
@@ -1484,6 +1484,9 @@
             const modalOverlay = document.getElementById('modalOverlay');
             memberModal.style.display = 'block';
             modalOverlay.style.display = 'block';
+            
+            // Focus the select element
+            memberSelect.focus();
         }
 
         function updateAssignment(taskId, index, newMember) {
@@ -1498,10 +1501,9 @@
             
             if (newMember && newMember !== '') {
                 addTaskAssignment(taskId, newMember);
+                renderTasks();
+                updateStats();
             }
-            
-            renderTasks();
-            updateStats();
         }
 
         function removeAssignment(taskId, index) {
@@ -1530,9 +1532,39 @@
             const selectedMember = memberSelect.value;
             
             if (selectedMember && selectedTaskId) {
+                // Add the new member assignment
                 addTaskAssignment(selectedTaskId, selectedMember);
+                
+                // Clear the selection
+                memberSelect.value = '';
+                
+                // Update the member dropdown to remove the selected member
+                const currentAssignments = getTaskAssignments(selectedTaskId);
+                const options = Array.from(memberSelect.options);
+                
+                // Remove all options except the first one (placeholder)
+                while (memberSelect.options.length > 1) {
+                    memberSelect.remove(1);
+                }
+                
+                // Re-add available members
+                members.forEach(member => {
+                    if (!currentAssignments.includes(member)) {
+                        const option = document.createElement('option');
+                        option.value = member;
+                        option.textContent = member;
+                        memberSelect.appendChild(option);
+                    }
+                });
+                
+                // If no more members available, close the modal
+                if (memberSelect.options.length === 1) {
+                    closeMemberModal();
+                }
+                
+                // Update the UI
                 renderTasks();
-                closeMemberModal();
+                updateStats();
             } else {
                 alert('Please select a member');
             }
