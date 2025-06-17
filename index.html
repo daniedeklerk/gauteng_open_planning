@@ -171,19 +171,21 @@
             font-size: 1.2rem;
             position: relative;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s ease;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            user-select: none;
         }
 
         .milestone-header:hover {
-            background: rgba(0,0,0,0.1);
+            background-color: rgba(0,0,0,0.1);
         }
 
         .milestone-toggle {
             font-size: 1.5rem;
             transition: transform 0.3s ease;
+            display: inline-block;
         }
 
         .milestone-toggle.collapsed {
@@ -194,17 +196,20 @@
             background: white;
             padding: 25px;
             overflow: hidden;
-            transition: all 0.3s ease;
+            transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+            max-height: 2000px; /* Adjust this value based on your content */
+            opacity: 1;
         }
 
         .milestone-content.collapsed {
             max-height: 0;
-            padding: 0 25px;
+            padding-top: 0;
+            padding-bottom: 0;
             opacity: 0;
         }
 
         .milestone-content.expanded {
-            max-height: none;
+            max-height: 2000px; /* Should match the value above */
             opacity: 1;
         }
 
@@ -2202,8 +2207,23 @@
 
         function toggleMilestone(milestoneId) {
             const isCollapsed = getMilestoneCollapsed(milestoneId);
+            const milestone = document.querySelector(`.milestone-${milestoneId}`);
+            const toggle = milestone.querySelector('.milestone-toggle');
+            const content = milestone.querySelector('.milestone-content');
+            
+            // Update the database/storage
             setMilestoneCollapsed(milestoneId, !isCollapsed);
-            renderTasks();
+            
+            // Update the UI
+            if (!isCollapsed) {
+                toggle.classList.add('collapsed');
+                content.classList.remove('expanded');
+                content.classList.add('collapsed');
+            } else {
+                toggle.classList.remove('collapsed');
+                content.classList.remove('collapsed');
+                content.classList.add('expanded');
+            }
         }
 
         function toggleTask(taskId) {
