@@ -1479,6 +1479,7 @@
                     while (stmt.step()) {
                         const row = stmt.getAsObject();
                         notes.push({
+                            id: row.id,
                             text: row.note_text,
                             addedBy: row.added_by,
                             addedAt: row.added_at
@@ -1691,8 +1692,8 @@
                             }
                         } else {
                             try {
-                                // Simpler SQLite deletion approach
-                                const result = db.exec(`DELETE FROM task_notes WHERE task_id = '${taskId}' AND id = '${noteId}'`);
+                                // Execute the delete statement directly
+                                db.exec(`DELETE FROM task_notes WHERE id = '${noteId}'`);
                                 deleted = true;
                                 saveDatabase();
                             } catch (error) {
