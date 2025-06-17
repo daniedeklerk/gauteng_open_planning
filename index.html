@@ -1177,6 +1177,8 @@
             }
         }
         
+        // Database persistence functions already defined
+        
         // Initialize the application
         async function init() {
             await initDatabase();
@@ -1355,6 +1357,36 @@
             updateStats();
         }
 
+        function addAssignment(taskId) {
+            if (!isAdminMode) {
+                alert('Only admin can assign tasks. Please enable admin mode first.');
+                return;
+            }
+            
+            // Add a placeholder assignment that will be updated when user selects a member
+            addTaskAssignment(taskId, '');
+            renderTasks();
+            updateStats();
+        }
+        
+        function updateAssignment(taskId, index, newMember) {
+            if (!isAdminMode) return;
+            
+            const currentAssignments = getTaskAssignments(taskId);
+            const oldMember = currentAssignments[index];
+            
+            if (oldMember) {
+                removeTaskAssignment(taskId, oldMember);
+            }
+            
+            if (newMember && newMember !== '') {
+                addTaskAssignment(taskId, newMember);
+            }
+            
+            renderTasks();
+            updateStats();
+        }
+        
         function removeAssignment(taskId, index) {
             if (!isAdminMode) return;
             
