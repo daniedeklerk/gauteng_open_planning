@@ -842,6 +842,8 @@
 
         <div id="assignmentsDebug" style="color: #c00; font-size: 1rem; margin: 10px 0;"></div>
 
+        <div id="renderError" style="color: #c00; font-size: 1.1rem; margin: 10px 0; display: none;"></div>
+
         <div class="stats">
             <div class="stat-card">
                 <div class="stat-number" id="totalTasks">0</div>
@@ -1673,6 +1675,37 @@
             });
         }
 
+        // Wrap renderTasks in try/catch to show errors
+        const originalRenderTasks = renderTasks;
+        renderTasks = function() {
+            try {
+                originalRenderTasks();
+                updateStats();
+                document.getElementById('renderError').style.display = 'none';
+            } catch (e) {
+                const errorDiv = document.getElementById('renderError');
+                if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = 'Render error: ' + e.message;
+                }
+            }
+        };
+
+        // Wrap init in try/catch to show errors
+        const originalInit = init;
+        init = async function() {
+            try {
+                await originalInit();
+                document.getElementById('renderError').style.display = 'none';
+            } catch (e) {
+                const errorDiv = document.getElementById('renderError');
+                if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = 'Init error: ' + e.message;
+                }
+            }
+        };
+
         function renderTasks() {
             const content = document.getElementById('content');
             const memberFilter = document.getElementById('memberFilter').value;
@@ -2372,13 +2405,6 @@
             renderTasks();
             updateStats();
         }
-
-        // Ensure updateStats is called after rendering tasks
-        const originalRenderTasks = renderTasks;
-        renderTasks = function() {
-            originalRenderTasks();
-            updateStats();
-        };
 
         function updateStats() {
             let total = 0, completed = 0, overdue = 0;
