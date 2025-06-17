@@ -2516,6 +2516,29 @@
             updateStats();
         };
 
+        function updateStats() {
+            let total = 0, completed = 0, overdue = 0;
+            const now = new Date();
+            milestones.forEach(milestone => {
+                milestone.sections.forEach(section => {
+                    section.tasks.forEach((task, taskIndex) => {
+                        const taskId = `${milestone.id}-${section.title}-${taskIndex}`;
+                        const completion = getTaskCompletion(taskId);
+                        total++;
+                        if (completion.isCompleted) {
+                            completed++;
+                        } else if (new Date(milestone.deadline) < now) {
+                            overdue++;
+                        }
+                    });
+                });
+            });
+            document.getElementById('totalTasks').textContent = total;
+            document.getElementById('completedTasks').textContent = completed;
+            document.getElementById('pendingTasks').textContent = total - completed;
+            document.getElementById('overdueTasks').textContent = overdue;
+        }
+
         // Initialize on page load
         window.addEventListener('load', init);
     </script>
