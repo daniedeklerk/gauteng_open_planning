@@ -1222,45 +1222,68 @@
                 const completion = taskCompletions[taskId];
                 return completion || { isCompleted: false, completedBy: null, completedAt: null };
             } else {
-                const stmt = db.prepare("SELECT * FROM task_completions WHERE task_id = ?");
-                stmt.bind({$taskId: taskId});
-                
-                if (stmt.step()) {
-                    const row = stmt.getAsObject();
+                try {
+                    const stmt = db.prepare("SELECT * FROM task_completions WHERE task_id = ?");
+                    stmt.bind([taskId]);
+                    
+                    if (stmt.step()) {
+                        const row = stmt.getAsObject();
+                        stmt.free();
+                        return {
+                            isCompleted: Boolean(row.is_completed),
+                            completedBy: row.completed_by,
+                            completedAt: row.completed_at
+                        };
+                    }
                     stmt.free();
-                    return {
-                        isCompleted: row.is_completed === 1,
-                        completedBy: row.completed_by,
-                        completedAt: row.completed_at
-                    };
+                    return { isCompleted: false, completedBy: null, completedAt: null };
+                } catch (error) {
+                    console.error('Error getting task completion:', error);
+                    return { isCompleted: false, completedBy: null, completedAt: null };
                 }
-                stmt.free();
-                return { isCompleted: false, completedBy: null, completedAt: null };
             }
         }
 
         function setTaskCompletion(taskId, isCompleted, completedBy = null) {
+            const timestamp = new Date().toISOString();
+            
             if (useFallbackStorage) {
                 if (isCompleted) {
                     taskCompletions[taskId] = {
                         isCompleted: true,
                         completedBy: completedBy,
-                        completedAt: new Date().toISOString()
+                        completedAt: timestamp
                     };
                 } else {
                     delete taskCompletions[taskId];
                 }
                 saveToFallbackStorage();
             } else {
-                if (isCompleted) {
-                    db.run(`
-                        INSERT OR REPLACE INTO task_completions (task_id, completed_by, is_completed) 
-                        VALUES (?, ?, TRUE)
-                    `, [taskId, completedBy]);
-                } else {
-                    db.run("DELETE FROM task_completions WHERE task_id = ?", [taskId]);
+                try {
+                    if (isCompleted) {
+                        db.run(`
+                            INSERT OR REPLACE INTO task_completions 
+                            (task_id, completed_by, completed_at, is_completed) 
+                            VALUES (?, ?, ?, ?)
+                        `, [taskId, completedBy, timestamp, 1]);
+                    } else {
+                        db.run("DELETE FROM task_completions WHERE task_id = ?", [taskId]);
+                    }
+                    saveDatabase(); // Save after modification
+                } catch (error) {
+                    console.error('Error setting task completion:', error);
+                    // Fallback to in-memory storage if database operation fails
+                    if (isCompleted) {
+                        taskCompletions[taskId] = {
+                            isCompleted: true,
+                            completedBy: completedBy,
+                            completedAt: timestamp
+                        };
+                    } else {
+                        delete taskCompletions[taskId];
+                    }
+                    saveToFallbackStorage();
                 }
-                saveDatabase(); // Save after modification
             }
         }
 
@@ -1690,8 +1713,12 @@
             if (!isCurrentlyCompleted) {
                 // Task is being marked as complete - ask for name
                 currentTaskId = taskId;
-                document.getElementById('completionModal').style.display = 'block';
-                document.getElementById('completionName').focus();
+                const modal = document.getElementById('completionModal');
+                const nameInput = document.getElementById('completionName');
+                modal.style.display = 'block';
+                document.getElementById('modalOverlay').style.display = 'block';
+                nameInput.value = ''; // Clear any previous value
+                nameInput.focus();
             } else {
                 // Task is being unmarked - confirm action
                 if (confirm("Are you sure you want to mark this task as incomplete?")) {
@@ -1707,17 +1734,15 @@
         }
 
         function closeCompletionModal() {
-            document.getElementById('completionModal').style.display = 'none';
+            const modal = document.getElementById('completionModal');
+            const overlay = document.getElementById('modalOverlay');
+            modal.style.display = 'none';
+            overlay.style.display = 'none';
             document.getElementById('completionName').value = '';
             
             // Uncheck the checkbox if modal was cancelled
             if (currentTaskId) {
-                const checkboxes = document.querySelectorAll('.task-checkbox');
-                checkboxes.forEach(cb => {
-                    if (cb.getAttribute('onchange').includes(currentTaskId)) {
-                        cb.checked = false;
-                    }
-                });
+                renderTasks(); // Re-render to ensure correct checkbox state
             }
             currentTaskId = null;
         }
@@ -1725,13 +1750,26 @@
         function confirmCompletion() {
             const completedBy = document.getElementById('completionName').value.trim();
             
-            if (completedBy && currentTaskId) {
+            if (!completedBy) {
+                showSystemMessage('Please enter your name to confirm completion.');
+                return;
+            }
+            
+            if (currentTaskId) {
                 setTaskCompletion(currentTaskId, true, completedBy);
+                const modal = document.getElementById('completionModal');
+                const overlay = document.getElementById('modalOverlay');
+                modal.style.display = 'none';
+                overlay.style.display = 'none';
+                document.getElementById('completionName').value = '';
+                currentTaskId = null;
+                
+                // Update UI
                 renderTasks();
                 updateStats();
-                closeCompletionModal();
-            } else {
-                showSystemMessage('Please enter your name to confirm completion.');
+                
+                // Show confirmation
+                showSystemMessage('Task marked as complete!');
             }
         }
 
