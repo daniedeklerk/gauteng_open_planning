@@ -1263,10 +1263,10 @@
 
         function loadFromFallbackStorage() {
             try {
-                const assignments = sessionStorage.getItem('taskAssignments');
-                const completions = sessionStorage.getItem('taskCompletions');
-                const collapsed = sessionStorage.getItem('collapsedMilestones');
-                const notes = sessionStorage.getItem('taskNotes');
+                const assignments = localStorage.getItem('taskAssignments');
+                const completions = localStorage.getItem('taskCompletions');
+                const collapsed = localStorage.getItem('collapsedMilestones');
+                const notes = localStorage.getItem('taskNotes');
                 
                 if (assignments) taskAssignments = JSON.parse(assignments);
                 if (completions) taskCompletions = JSON.parse(completions);
@@ -1283,12 +1283,12 @@
 
         function saveToFallbackStorage() {
             try {
-                sessionStorage.setItem('taskAssignments', JSON.stringify(taskAssignments));
-                sessionStorage.setItem('taskCompletions', JSON.stringify(taskCompletions));
-                sessionStorage.setItem('collapsedMilestones', JSON.stringify(collapsedMilestones));
-                sessionStorage.setItem('taskNotes', JSON.stringify(taskNotes));
+                localStorage.setItem('taskAssignments', JSON.stringify(taskAssignments));
+                localStorage.setItem('taskCompletions', JSON.stringify(taskCompletions));
+                localStorage.setItem('collapsedMilestones', JSON.stringify(collapsedMilestones));
+                localStorage.setItem('taskNotes', JSON.stringify(taskNotes));
             } catch (e) {
-                console.log('Session storage not available');
+                console.log('Local storage not available');
             }
         }
 
