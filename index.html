@@ -905,6 +905,15 @@
         </div>
     </div>
 
+    <!-- System Confirmation Modal -->
+    <div id="confirmationModal" class="system-modal">
+        <div class="message"></div>
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="handleConfirmationResponse(true)">Yes</button>
+            <button class="btn btn-secondary" onclick="handleConfirmationResponse(false)">No</button>
+        </div>
+    </div>
+
     <button class="floating-action" onclick="scrollToTop()" title="Back to Top">↑</button>
 
     <script>
@@ -1095,6 +1104,10 @@
 
         // Admin password
         const adminPassword = "bowls2025danie";
+
+        // Add these variables at the start of your script
+        let confirmationCallback = null;
+        let confirmationCheckbox = null;
 
         // Initialize database or fallback storage
         async function initDatabase() {
@@ -1719,12 +1732,18 @@
                                         removeBtn.innerHTML = '×';
                                         removeBtn.title = 'Remove member';
                                         removeBtn.onclick = (e) => {
-                                            e.stopPropagation(); // Prevent event bubbling
-                                            if (confirm(`Remove ${member} from this task?`)) {
-                                                removeTaskAssignment(taskId, member);
-                                                renderTasks();
-                                                updateStats();
-                                            }
+                                            e.stopPropagation();
+                                            showConfirmationDialog(
+                                                `Remove ${member} from this task?`,
+                                                null,
+                                                (confirmed) => {
+                                                    if (confirmed) {
+                                                        removeTaskAssignment(taskId, member);
+                                                        renderTasks();
+                                                        updateStats();
+                                                    }
+                                                }
+                                            );
                                         };
                                         assigneeTag.appendChild(removeBtn);
                                     }
@@ -1735,6 +1754,37 @@
                         }
                         contentPart.appendChild(assigneesDiv);
 
+                        // Create notes section
+                        const notesDiv = document.createElement('div');
+                        notesDiv.className = 'task-notes';
+                        
+                        // Add the notes button
+                        const addNoteBtn = document.createElement('button');
+                        addNoteBtn.className = 'add-note-btn';
+                        addNoteBtn.innerHTML = '<span style="font-size: 1.2em;">+</span> Add Note';
+                        addNoteBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            showAddNoteModal(taskId);
+                        };
+                        notesDiv.appendChild(addNoteBtn);
+                        
+                        // Add existing notes
+                        const notes = getTaskNotes(taskId);
+                        if (notes && notes.length > 0) {
+                            notes.forEach(note => {
+                                const noteDiv = document.createElement('div');
+                                noteDiv.className = 'note-item';
+                                const date = new Date(note.addedAt).toLocaleString();
+                                noteDiv.innerHTML = `
+                                    <div style="white-space: pre-wrap;">${note.text}</div>
+                                    <div class="note-meta">Added by ${note.addedBy} on ${date}</div>
+                                `;
+                                notesDiv.appendChild(noteDiv);
+                            });
+                        }
+                        
+                        contentPart.appendChild(notesDiv);
+
                         // Create assignment section
                         const assignSectionDiv = document.createElement('div');
                         assignSectionDiv.className = 'assign-section';
@@ -1743,7 +1793,10 @@
                             const addButton = document.createElement('button');
                             addButton.className = 'add-member-btn';
                             addButton.textContent = '+ Add Member';
-                            addButton.onclick = () => addAssignment(taskId);
+                            addButton.onclick = (e) => {
+                                e.stopPropagation();
+                                addAssignment(taskId);
+                            };
                             assignSectionDiv.appendChild(addButton);
                         } else {
                             assignSectionDiv.style.opacity = '0.5';
@@ -1935,15 +1988,21 @@
                     return;
                 }
                 
-                // Task is being unmarked - confirm action
-                if (confirm("Are you sure you want to mark this task as incomplete?")) {
-                    setTaskCompletion(taskId, false);
-                    renderTasks();
-                    updateStats();
-                } else {
-                    // User cancelled - keep it checked
-                    event.target.checked = true;
-                }
+                // Show confirmation dialog
+                showConfirmationDialog(
+                    "Are you sure you want to mark this task as incomplete?",
+                    event.target,
+                    (confirmed) => {
+                        if (confirmed) {
+                            setTaskCompletion(taskId, false);
+                            renderTasks();
+                            updateStats();
+                        } else {
+                            // User cancelled - keep it checked
+                            event.target.checked = true;
+                        }
+                    }
+                );
             }
         }
 
@@ -2135,17 +2194,63 @@
         // Add this function to your JavaScript
         async function updateVersionTag() {
             try {
+                // First try to get the version from a version.json file
+                try {
+                    const response = await fetch('version.json');
+                    if (response.ok) {
+                        const data = await response.json();
+                        document.getElementById('versionTag').textContent = `Version ${data.version} (${data.date})`;
+                        return;
+                    }
+                } catch (e) {
+                    console.log('No version.json found, trying GitHub API...');
+                }
+
+                // Fallback to GitHub API
                 const response = await fetch('https://api.github.com/repos/dmnde/gauteng_open_planning/commits/main');
                 if (response.ok) {
                     const data = await response.json();
                     const shortHash = data.sha.substring(0, 7);
                     const date = new Date(data.commit.author.date).toLocaleDateString();
                     document.getElementById('versionTag').textContent = `Version 1.0 (${date} - ${shortHash})`;
+                } else {
+                    // If GitHub API fails, use build timestamp
+                    const buildDate = new Date().toLocaleDateString();
+                    document.getElementById('versionTag').textContent = `Version 1.0 (${buildDate})`;
                 }
             } catch (error) {
                 console.error('Error fetching version:', error);
                 // Keep the default version if there's an error
+                document.getElementById('versionTag').textContent = 'Version 1.0';
             }
+        }
+
+        function showConfirmationDialog(message, checkbox, callback) {
+            const modal = document.getElementById('confirmationModal');
+            const overlay = document.getElementById('modalOverlay');
+            const messageDiv = modal.querySelector('.message');
+            
+            messageDiv.textContent = message;
+            modal.style.display = 'block';
+            overlay.style.display = 'block';
+            
+            confirmationCallback = callback;
+            confirmationCheckbox = checkbox;
+        }
+
+        function handleConfirmationResponse(confirmed) {
+            const modal = document.getElementById('confirmationModal');
+            const overlay = document.getElementById('modalOverlay');
+            
+            modal.style.display = 'none';
+            overlay.style.display = 'none';
+            
+            if (confirmationCallback) {
+                confirmationCallback(confirmed);
+            }
+            
+            confirmationCallback = null;
+            confirmationCheckbox = null;
         }
 
         // Initialize on page load
