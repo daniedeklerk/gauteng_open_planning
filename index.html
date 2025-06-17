@@ -1842,6 +1842,9 @@
             const milestoneFilter = document.getElementById('milestoneFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
 
+            // Debug log for mobile filtering
+            console.log('Member filter value:', memberFilter);
+
             content.innerHTML = '';
 
             let hasVisibleTasks = false;
