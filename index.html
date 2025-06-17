@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bronkhorstspruit Bowling Club Tournament Planner</title>
+    <!-- SQL.js library for SQLite support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c5530;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .filters {
+            padding: 30px;
+            background: white;
+            border-bottom: 1px solid #eee;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .filter-group select, .filter-group input {
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .filter-group select:focus, .filter-group input:focus {
+            outline: none;
+            border-color: #2c5530;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: #2c5530;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e3a21;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .milestone {
+            margin-bottom: 40px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+
+        .milestone-header {
+            padding: 20px 25px;
+            color: white;
+            font-weight: 600;
+            font-size: 1.2rem;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .milestone-header:hover {
+            background: rgba(0,0,0,0.1);
+        }
+
+        .milestone-toggle {
+            font-size: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+
+        .milestone-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .milestone-content {
+            background: white;
+            padding: 25px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .milestone-content.collapsed {
+            max-height: 0;
+            padding: 0 25px;
+            opacity: 0;
+        }
+
+        .milestone-content.expanded {
+            max-height: none;
+            opacity: 1;
+        }
+
+        .milestone-1 { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
+        .milestone-2 { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
+        .milestone-3 { background: linear-gradient(135deg, #45b7d1, #96c93d); }
+        .milestone-4 { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .milestone-5 { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .task {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #2c5530;
+            transition: all 0.3s ease;
+            align-items: flex-start;
+        }
+
+        .task:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .task.completed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+
+        .task.overdue {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        .task-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            margin-top: 2px;
+        }
+
+        .task-content {
+            flex: 1;
+        }
+
+        .task-title {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .task-assignees {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 5px;
+        }
+
+        .task-assignee {
+            background: #2c5530;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .task-deadline {
+            color: #e74c3c;
+            font-weight: 500;
+        }
+
+        .assign-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 200px;
+        }
+
+        .member-selector {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .member-select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .add-member-btn, .remove-member-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .add-member-btn {
+            background: #28a745;
+            color: white;
+        }
+
+        .remove-member-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .add-member-btn:hover {
+            background: #218838;
+        }
+
+        .remove-member-btn:hover {
+            background: #c82333;
+        }
+
+        .no-tasks {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            overflow-y: auto;
+            max-height: 90vh;
+        }
+
+        .modal-header {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2c5530;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+        }
+        
+        .milestone-1 { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
+        .milestone-2 { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
+        .milestone-3 { background: linear-gradient(135deg, #45b7d1, #96c93d); }
+        .milestone-4 { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .milestone-5 { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+
+        .section {
+            margin-bottom: 30px;
+        }
+            
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .header p {
+                font-size: 1rem;
+            }
+            
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+                padding: 15px;
+                gap: 10px;
+            }
+            
+            .filter-row {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            #adminPassword {
+                min-width: 0;
+                width: 100%;
+            }
+            
+            .filter-group div {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .filter-group button {
+                margin-top: 5px;
+                width: 100%;
+            }
+            
+            .button-group {
+                justify-content: center;
+            }
+            
+            .task {
+                grid-template-columns: auto 1fr;
+                grid-template-areas:
+                    "checkbox content"
+                    "space assign";
+                gap: 10px;
+                padding: 12px;
+            }
+            
+            .task-checkbox {
+                grid-area: checkbox;
+                align-self: center;
+            }
+            
+            .task-content {
+                grid-area: content;
+            }
+            
+            .assign-section {
+                grid-area: assign;
+                width: 100%;
+                margin-top: 10px;
+            }
+            
+            .milestone-header {
+                padding: 15px;
+                font-size: 1rem;
+            }
+            
+            .milestone-content {
+                padding: 15px;
+            }
+            
+            .btn {
+                padding: 10px 15px;
+                font-size: 0.85rem;
+            }
+            
+            .container {
+                border-radius: 10px;
+            }
+            
+            body {
+                padding: 10px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 5% auto;
+                padding: 20px;
+            }
+            
+            .filters {
+                padding: 20px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .task-meta {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            
+            .floating-action {
+                bottom: 20px;
+                right: 20px;
+                width: 50px;
+                height: 50px;
+                font-size: 1.2rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .header p {
+                font-size: 0.9rem;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr 1fr;
+                padding: 10px;
+                gap: 8px;
+            }
+            
+            .stat-card {
+                padding: 12px;
+            }
+            
+            .stat-number {
+                font-size: 1.5rem;
+            }
+            
+            .stat-label {
+                font-size: 0.8rem;
+            }
+            
+            .member-selector {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .add-member-btn, .remove-member-btn {
+                padding: 6px 10px;
+                font-size: 0.75rem;
+            }
+        }
+
+        .floating-action {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #2c5530;
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .floating-action:hover {
+            transform: scale(1.1);
+            background: #1e3a21;
+        }
+
+        .completed-by {
+            color: #28a745;
+            font-style: italic;
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏆 Tournament Planning Dashboard</h1>
+            <p>Bronkhorstspruit Bowling Club | Men's Pairs (July 5-6) & Men's Singles (July 12, 2025)</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalTasks">0</div>
+                <div class="stat-label">Total Tasks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="completedTasks">0</div>
+                <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="pendingTasks">0</div>
+                <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="overdueTasks">0</div>
+                <div class="stat-label">Overdue</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label for="adminToggle">Admin Mode</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                        <input type="password" id="adminPassword" placeholder="Enter admin password" style="flex: 1; min-width: 150px; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px;">
+                        <button class="btn btn-primary" onclick="toggleAdminMode()" id="adminBtn">Enable Admin</button>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label for="memberFilter">Filter by Member</label>
+                    <select id="memberFilter">
+                        <option value="">All Members</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="milestoneFilter">Filter by Milestone</label>
+                    <select id="milestoneFilter">
+                        <option value="">All Milestones</option>
+                        <option value="1">Urgent Preparation</option>
+                        <option value="2">Greens & Facilities</option>
+                        <option value="3">Catering Arrangements</option>
+                        <option value="4">Competition Setup</option>
+                        <option value="5">Final Preparations</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="statusFilter">Filter by Status</label>
+                    <select id="statusFilter">
+                        <option value="">All Tasks</option>
+                        <option value="completed">Completed</option>
+                        <option value="pending">Pending</option>
+                        <option value="overdue">Overdue</option>
+                    </select>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="exportProgress()">📊 Export Progress</button>
+                <button class="btn btn-secondary" onclick="clearFilters()">🔄 Clear Filters</button>
+                <button class="btn btn-primary" onclick="markAllComplete()" ${!isAdminMode ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>✅ Mark Milestone Complete</button>
+            </div>
+        </div>
+
+        <div class="content" id="content">
+            <!-- Content will be generated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Completion Modal -->
+    <div id="completionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Task Completion</div>
+            <p>Please enter your name to confirm task completion:</p>
+            <input type="text" id="completionName" class="modal-input" placeholder="Enter your full name">
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeCompletionModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmCompletion()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="floating-action" onclick="scrollToTop()" title="Back to Top">↑</button>
+
+    <script>
+        // Tournament planning data
+        const milestones = [
+            {
+                id: 1,
+                title: "URGENT PREPARATION",
+                deadline: "June 20, 2025",
+                sections: [
+                    {
+                        title: "Officials & Administration Setup",
+                        tasks: [
+                            "Appoint Tournament Official and send name/contact to ewagner@mweb.co.za",
+                            "Arrange office/space for Tournament Official with computer and internet access",
+                            "Recruit one Technical Official (Umpire) per green - send names to ewagner@mweb.co.za",
+                            "Ensure Umpire has fully equipped kit (measuring tape, chalk, etc.)",
+                            "Arrange markers for Singles sectional games",
+                            "Test and prepare lightning detector with extra batteries",
+                            "Check public liability insurance is current and valid",
+                            "Prepare first aid kit (plasters, disinfectant, rub - NO medications)",
+                            "Set up VIP parking area with clear signage"
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 2,
+                title: "GREENS & FACILITIES PREPARATION",
+                deadline: "June 25, 2025",
+                sections: [
+                    {
+                        title: "Green Maintenance",
+                        tasks: [
+                            "Ensure greens are Grade \"B\" standard (minimum 12 seconds speed)",
+                            "Schedule daily green cutting for tournament dates",
+                            "Mark greens for morning and afternoon play directions",
+                            "Test green speed weekly leading up to tournament"
+                        ]
+                    },
+                    {
+                        title: "Facilities & Equipment",
+                        tasks: [
+                            "Arrange gazebos/umbrellas for spectator shade",
+                            "Set up water canisters and refill schedule",
+                            "Prepare clean flags for daily raising",
+                            "Arrange security for parking area",
+                            "Ensure bar facilities are operational",
+                            "Establish dress code (club attire) signage"
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 3,
+                title: "CATERING ARRANGEMENTS",
+                deadline: "June 28, 2025",
+                sections: [
+                    {
+                        title: "Menu Planning & Setup",
+                        tasks: [
+                            "Create daily menus and display boards",
+                            "Arrange table numbers and VIP/TO reserved seating",
+                            "Prepare meal tickets for various options (R15-R70 range)",
+                            "Set up multiple service points if expecting 50+ people per day",
+                            "Arrange Saturday evening braai & entertainment (if desired)",
+                            "Prepare meal claim forms for VIPs/markers",
+                            "Contact Retha (treas.bgn@gmail.com) for reimbursement process",
+                            "Budget for Tournament Official and Technical Official meals (club expense)"
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 4,
+                title: "COMPETITION SETUP",
+                deadline: "July 1, 2025",
+                sections: [
+                    {
+                        title: "Documentation & Systems",
+                        tasks: [
+                            "Print and display Conditions of Play prominently",
+                            "Prepare declaration forms with all required sections",
+                            "Set up computer access to Bowls Draw System (bowlsdraw.co.za)",
+                            "Test internet connection and data bundle",
+                            "Prepare scorecards for all matches"
+                        ]
+                    },
+                    {
+                        title: "Player Communication",
+                        tasks: [
+                            "Display Tournament Official's name and contact number",
+                            "Post medical emergency numbers (doctor, dentist, emergency services)",
+                            "Create player information boards with game times and details"
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 5,
+                title: "FINAL PREPARATIONS",
+                deadline: "July 4, 2025",
+                sections: [
+                    {
+                        title: "Last-Minute Checks",
+                        tasks: [
+                            "Verify no green fees required (covered in entry fees)",
+                            "Test bell/siren system for time calls",
+                            "Arrange sponsor banner display and return plan",
+                            "Set up photo/video coordination with players",
+                            "Prepare warm-up area allocation system"
+                        ]
+                    },
+                    {
+                        title: "Staff Briefing",
+                        tasks: [
+                            "Brief all volunteers on their roles and responsibilities",
+                            "Review tournament schedule and timings",
+                            "Explain emergency procedures",
+                            "Assign backup personnel for key roles"
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        // Available members
+        const members = [
+            "Archer, Marianne (76363)",
+            "Blake, Patrick (76731)",
+            "Dalgleish, Santie (59193)",
+            "de Klerk, Elsabé (70568)",
+            "Dreyer, Albert (32176)",
+            "Dreyer, Yvonne (72024)",
+            "du Plessis, Manie (57961)",
+            "Engelbrecht, Manie (58268)",
+            "Fourie, Johan (2860)",
+            "Kendall, Elizabeth (63705)",
+            "Le Roux, Christie (2871)",
+            "le Roux, Johan (2873)",
+            "Liebenberg, Jan (69811)",
+            "Liebenberg, Norene (34067)",
+            "Moolman, Jurgens (76328)",
+            "Moolman, Marlien (76332)",
+            "Muhlhauser, Dee (13708)",
+            "O'Connel, John (64223)",
+            "Pieters, Jannie (78529)",
+            "Prinsloo, Martin (75579)",
+            "Prinsloo, Rina (56571)",
+            "Seymour, Kobus (77924)",
+            "Steyl, Bruyn (69071)",
+            "Swart, Blackie (68017)",
+            "Swart, Reinette (71354)",
+            "Van der Merwe, Rosemarie (73102)",
+            "Van Niekerk, Petru (76569)",
+            "Van Wyk, Adri (64354)",
+            "Vaughan, Anna-Marie (3379)",
+            "Vaughan, Bob (3378)",
+            "De kock, Marius (10367)",
+            "Dippenaar, Shani (76348)",
+            "Mc Cann , Neil (72030)",
+            "Gouws, Nanette (79193)",
+            "Gouws, Riaan (79194)",
+            "Maree, Yolanda (74933)",
+            "Van Rensburg, Christien (67030)",
+            "Van Rensburg, Toon (67545)",
+            "Venter, Elaine (79265)",
+            "Venter, Christina (79267)",
+            "Fivaz, Regardt (80060)",
+            "van Zyl, Christo (80265)",
+            "de Klerk, Danie (70567)",
+            "Grobler, Jannie (80686)",
+            "Smith, Cindy (80726)",
+            "Taljaard, Bettie (80725)"
+        ];
+
+        let db;
+        let isAdminMode = false;
+        let currentTaskId = null;
+        let useFallbackStorage = true;
+
+        // Fallback storage objects
+        let taskAssignments = {}; // taskId: [member1, member2, ...]
+        let taskCompletions = {}; // taskId: {isCompleted, completedBy, completedAt}
+        let collapsedMilestones = {}; // milestoneId: boolean
+
+        // Admin password
+        const adminPassword = "bowls2025danie";
+
+        // Initialize database or fallback storage
+        async function initDatabase() {
+            try {
+                // Try to load SQLite if available
+                if (typeof initSqlJs !== 'undefined') {
+                    const SQL = await initSqlJs({
+                        locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+                    });
+                    
+                    // Try to load existing database from localStorage
+                    let dbData = localStorage.getItem('tournamentPlannerDB');
+                    if (dbData) {
+                        try {
+                            // Convert base64 string to Uint8Array
+                            const binaryString = window.atob(dbData);
+                            const len = binaryString.length;
+                            const bytes = new Uint8Array(len);
+                            for (let i = 0; i < len; i++) {
+                                bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            db = new SQL.Database(bytes);
+                            console.log('Loaded existing database from localStorage');
+                        } catch (e) {
+                            console.error('Error loading database from localStorage:', e);
+                            db = new SQL.Database(); // Create new if loading fails
+                        }
+                    } else {
+                        db = new SQL.Database(); // Create new if none exists
+                    }
+                    
+                    useFallbackStorage = false;
+                    
+                    // Create tables
+                    db.run(`
+                        CREATE TABLE IF NOT EXISTS task_assignments (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            task_id TEXT,
+                            member_name TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        );
+                    `);
+                    
+                    db.run(`
+                        CREATE TABLE IF NOT EXISTS task_completions (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            task_id TEXT UNIQUE,
+                            completed_by TEXT,
+                            completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            is_completed BOOLEAN DEFAULT TRUE
+                        );
+                    `);
+                    
+                    db.run(`
+                        CREATE TABLE IF NOT EXISTS collapsed_milestones (
+                            milestone_id INTEGER PRIMARY KEY,
+                            is_collapsed BOOLEAN DEFAULT FALSE
+                        );
+                    `);
+                    
+                    // Migrate data from fallback storage if needed
+                    migrateFromFallbackIfNeeded();
+                    
+                    // Set up auto-save mechanism
+                    window.setInterval(saveDatabase, 30000); // Save every 30 seconds
+                    
+                    console.log('SQLite database initialized successfully');
+                } else {
+                    throw new Error('SQLite not available');
+                }
+            } catch (error) {
+                console.error('Error initializing SQLite:', error);
+                console.log('Using fallback in-memory storage');
+                useFallbackStorage = true;
+                loadFromFallbackStorage();
+            }
+        }
+
+        function loadFromFallbackStorage() {
+            try {
+                const assignments = sessionStorage.getItem('taskAssignments');
+                const completions = sessionStorage.getItem('taskCompletions');
+                const collapsed = sessionStorage.getItem('collapsedMilestones');
+                
+                if (assignments) taskAssignments = JSON.parse(assignments);
+                if (completions) taskCompletions = JSON.parse(completions);
+                if (collapsed) collapsedMilestones = JSON.parse(collapsed);
+            } catch (e) {
+                // Start with empty data if parsing fails
+                taskAssignments = {};
+                taskCompletions = {};
+                collapsedMilestones = {};
+            }
+        }
+
+        function saveToFallbackStorage() {
+            try {
+                sessionStorage.setItem('taskAssignments', JSON.stringify(taskAssignments));
+                sessionStorage.setItem('taskCompletions', JSON.stringify(taskCompletions));
+                sessionStorage.setItem('collapsedMilestones', JSON.stringify(collapsedMilestones));
+            } catch (e) {
+                console.log('Session storage not available');
+            }
+        }
+
+        function getTaskAssignments(taskId) {
+            if (useFallbackStorage) {
+                return taskAssignments[taskId] || [];
+            } else {
+                const stmt = db.prepare("SELECT member_name FROM task_assignments WHERE task_id = ?");
+                const assignments = [];
+                
+                stmt.bind({$taskId: taskId});
+                while (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    assignments.push(row.member_name);
+                }
+                stmt.free();
+                
+                return assignments;
+            }
+        }
+
+        function addTaskAssignment(taskId, memberName) {
+            if (!memberName || memberName === 'Select Member') return;
+            
+            if (useFallbackStorage) {
+                if (!taskAssignments[taskId]) {
+                    taskAssignments[taskId] = [];
+                }
+                if (!taskAssignments[taskId].includes(memberName)) {
+                    taskAssignments[taskId].push(memberName);
+                }
+                saveToFallbackStorage();
+            } else {
+                // Check if assignment already exists
+                const stmt = db.prepare("SELECT COUNT(*) as count FROM task_assignments WHERE task_id = ? AND member_name = ?");
+                stmt.bind({$taskId: taskId, $memberName: memberName});
+                
+                if (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    if (row.count === 0) {
+                        db.run("INSERT INTO task_assignments (task_id, member_name) VALUES (?, ?)", [taskId, memberName]);
+                        saveDatabase(); // Save after modification
+                    }
+                }
+                stmt.free();
+            }
+        }
+
+        function removeTaskAssignment(taskId, memberName) {
+            if (useFallbackStorage) {
+                if (taskAssignments[taskId]) {
+                    taskAssignments[taskId] = taskAssignments[taskId].filter(name => name !== memberName);
+                    if (taskAssignments[taskId].length === 0) {
+                        delete taskAssignments[taskId];
+                    }
+                }
+                saveToFallbackStorage();
+            } else {
+                db.run("DELETE FROM task_assignments WHERE task_id = ? AND member_name = ?", [taskId, memberName]);
+                saveDatabase(); // Save after modification
+            }
+        }
+
+        function getTaskCompletion(taskId) {
+            if (useFallbackStorage) {
+                const completion = taskCompletions[taskId];
+                return completion || { isCompleted: false, completedBy: null, completedAt: null };
+            } else {
+                const stmt = db.prepare("SELECT * FROM task_completions WHERE task_id = ?");
+                stmt.bind({$taskId: taskId});
+                
+                if (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    stmt.free();
+                    return {
+                        isCompleted: row.is_completed === 1,
+                        completedBy: row.completed_by,
+                        completedAt: row.completed_at
+                    };
+                }
+                stmt.free();
+                return { isCompleted: false, completedBy: null, completedAt: null };
+            }
+        }
+
+        function setTaskCompletion(taskId, isCompleted, completedBy = null) {
+            if (useFallbackStorage) {
+                if (isCompleted) {
+                    taskCompletions[taskId] = {
+                        isCompleted: true,
+                        completedBy: completedBy,
+                        completedAt: new Date().toISOString()
+                    };
+                } else {
+                    delete taskCompletions[taskId];
+                }
+                saveToFallbackStorage();
+            } else {
+                if (isCompleted) {
+                    db.run(`
+                        INSERT OR REPLACE INTO task_completions (task_id, completed_by, is_completed) 
+                        VALUES (?, ?, TRUE)
+                    `, [taskId, completedBy]);
+                } else {
+                    db.run("DELETE FROM task_completions WHERE task_id = ?", [taskId]);
+                }
+                saveDatabase(); // Save after modification
+            }
+        }
+
+        function getMilestoneCollapsed(milestoneId) {
+            if (useFallbackStorage) {
+                return collapsedMilestones[milestoneId] || false;
+            } else {
+                const stmt = db.prepare("SELECT is_collapsed FROM collapsed_milestones WHERE milestone_id = ?");
+                stmt.bind({$milestoneId: milestoneId});
+                
+                if (stmt.step()) {
+                    const row = stmt.getAsObject();
+                    stmt.free();
+                    return row.is_collapsed === 1;
+                }
+                stmt.free();
+                return false;
+            }
+        }
+
+        function setMilestoneCollapsed(milestoneId, isCollapsed) {
+            if (useFallbackStorage) {
+                collapsedMilestones[milestoneId] = isCollapsed;
+                saveToFallbackStorage();
+            } else {
+                db.run(`
+                    INSERT OR REPLACE INTO collapsed_milestones (milestone_id, is_collapsed) 
+                    VALUES (?, ?)
+                `, [milestoneId, isCollapsed ? 1 : 0]);
+                saveDatabase(); // Save after modification
+            }
+        }
+
+        // Save database to localStorage
+        function saveDatabase() {
+            if (!useFallbackStorage && db) {
+                try {
+                    const data = db.export();
+                    const arr = new Uint8Array(data);
+                    let binary = '';
+                    for (let i = 0; i < arr.length; i++) {
+                        binary += String.fromCharCode(arr[i]);
+                    }
+                    const base64 = window.btoa(binary);
+                    localStorage.setItem('tournamentPlannerDB', base64);
+                    console.log('Database saved to localStorage');
+                } catch (e) {
+                    console.error('Error saving database to localStorage:', e);
+                }
+            }
+        }
+        
+        // Migrate data from fallback storage to SQLite if needed
+        function migrateFromFallbackIfNeeded() {
+            try {
+                const assignments = sessionStorage.getItem('taskAssignments');
+                const completions = sessionStorage.getItem('taskCompletions');
+                const collapsed = sessionStorage.getItem('collapsedMilestones');
+                
+                if (assignments) {
+                    const assignData = JSON.parse(assignments);
+                    for (const taskId in assignData) {
+                        assignData[taskId].forEach(member => {
+                            db.run("INSERT OR IGNORE INTO task_assignments (task_id, member_name) VALUES (?, ?)", [taskId, member]);
+                        });
+                    }
+                }
+                
+                if (completions) {
+                    const completionData = JSON.parse(completions);
+                    for (const taskId in completionData) {
+                        const data = completionData[taskId];
+                        db.run(
+                            "INSERT OR REPLACE INTO task_completions (task_id, completed_by, is_completed) VALUES (?, ?, ?)",
+                            [taskId, data.completedBy, data.isCompleted ? 1 : 0]
+                        );
+                    }
+                }
+                
+                if (collapsed) {
+                    const collapsedData = JSON.parse(collapsed);
+                    for (const milestoneId in collapsedData) {
+                        db.run(
+                            "INSERT OR REPLACE INTO collapsed_milestones (milestone_id, is_collapsed) VALUES (?, ?)",
+                            [milestoneId, collapsedData[milestoneId] ? 1 : 0]
+                        );
+                    }
+                }
+                
+                // Clear session storage after migration
+                sessionStorage.removeItem('taskAssignments');
+                sessionStorage.removeItem('taskCompletions');
+                sessionStorage.removeItem('collapsedMilestones');
+            } catch (e) {
+                console.error('Error migrating data from fallback storage:', e);
+            }
+        }
+        
+        // Initialize the application
+        async function init() {
+            await initDatabase();
+            populateMemberFilter();
+            renderTasks();
+            updateStats();
+            
+            // Set up event listener to save database before page unload
+            window.addEventListener('beforeunload', saveDatabase);
+        }
+
+        function populateMemberFilter() {
+            const memberFilter = document.getElementById('memberFilter');
+            members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member;
+                option.textContent = member;
+                memberFilter.appendChild(option);
+            });
+        }
+
+        function renderTasks() {
+            const content = document.getElementById('content');
+            const memberFilter = document.getElementById('memberFilter').value;
+            const milestoneFilter = document.getElementById('milestoneFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            content.innerHTML = '';
+
+            let hasVisibleTasks = false;
+
+            milestones.forEach(milestone => {
+                if (milestoneFilter && milestone.id.toString() !== milestoneFilter) return;
+
+                const milestoneDiv = document.createElement('div');
+                milestoneDiv.className = `milestone milestone-${milestone.id}`;
+
+                const milestoneHeader = document.createElement('div');
+                milestoneHeader.className = 'milestone-header';
+                milestoneHeader.onclick = () => toggleMilestone(milestone.id);
+                
+                const isCollapsed = getMilestoneCollapsed(milestone.id);
+                milestoneHeader.innerHTML = `
+                    <span><strong>${milestone.title}</strong> - Due: ${milestone.deadline}</span>
+                    <span class="milestone-toggle ${isCollapsed ? 'collapsed' : ''}">▼</span>
+                `;
+
+                const milestoneContent = document.createElement('div');
+                milestoneContent.className = `milestone-content ${isCollapsed ? 'collapsed' : 'expanded'}`;
+
+                let milestoneHasTasks = false;
+
+                milestone.sections.forEach(section => {
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'section';
+
+                    const sectionTitle = document.createElement('div');
+                    sectionTitle.className = 'section-title';
+                    sectionTitle.textContent = section.title;
+
+                    let sectionHasTasks = false;
+
+                    section.tasks.forEach((task, taskIndex) => {
+                        const taskId = `${milestone.id}-${section.title}-${taskIndex}`;
+                        const assignedMembers = getTaskAssignments(taskId);
+                        const completion = getTaskCompletion(taskId);
+                        const isCompleted = completion.isCompleted;
+                        const isOverdue = !isCompleted && new Date() > new Date(milestone.deadline);
+
+                        // Apply filters
+                        if (memberFilter && !assignedMembers.includes(memberFilter)) return;
+                        if (statusFilter === 'completed' && !isCompleted) return;
+                        if (statusFilter === 'pending' && isCompleted) return;
+                        if (statusFilter === 'overdue' && !isOverdue) return;
+
+                        const taskDiv = document.createElement('div');
+                        taskDiv.className = `task ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`;
+
+                        const completedByText = completion.completedBy && isCompleted ? 
+                            `<div class="completed-by">✓ Completed by: ${completion.completedBy}</div>` : '';
+
+                        const assigneeElements = assignedMembers.map(member => 
+                            `<span class="task-assignee">${member}</span>`
+                        ).join('');
+
+                        // Create assignment section
+                        const assignmentSection = isAdminMode ? `
+                            <div class="assign-section">
+                                ${assignedMembers.map((member, index) => `
+                                    <div class="member-selector">
+                                        <select class="member-select" onchange="updateAssignment('${taskId}', ${index}, this.value)">
+                                            <option value="">Select Member</option>
+                                            ${members.map(m => 
+                                                `<option value="${m}" ${member === m ? 'selected' : ''}>${m}</option>`
+                                            ).join('')}
+                                        </select>
+                                        <button class="remove-member-btn" onclick="removeAssignment('${taskId}', ${index})">−</button>
+                                    </div>
+                                `).join('')}
+                                <button class="add-member-btn" onclick="addAssignment('${taskId}')">+ Add Member</button>
+                            </div>
+                        ` : `
+                            <div class="assign-section" style="opacity: 0.5;">
+                                <div style="font-size: 0.8rem; color: #666; text-align: center;">
+                                    Admin mode required<br>for assignments
+                                </div>
+                            </div>
+                        `;
+
+                        taskDiv.innerHTML = `
+                            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} 
+                                   onchange="toggleTask('${taskId}')">
+                            <div class="task-content">
+                                <div class="task-title">${task}</div>
+                                ${completedByText}
+                                <div class="task-meta">
+                                    <span class="task-deadline">Due: ${milestone.deadline}</span>
+                                </div>
+                                <div class="task-assignees">
+                                    ${assigneeElements}
+                                </div>
+                            </div>
+                            ${assignmentSection}
+                        `;
+
+                        sectionDiv.appendChild(taskDiv);
+                        sectionHasTasks = true;
+                        milestoneHasTasks = true;
+                        hasVisibleTasks = true;
+                    });
+
+                    if (sectionHasTasks) {
+                        sectionDiv.insertBefore(sectionTitle, sectionDiv.firstChild);
+                        milestoneContent.appendChild(sectionDiv);
+                    }
+                });
+
+                if (milestoneHasTasks) {
+                    milestoneDiv.appendChild(milestoneHeader);
+                    milestoneDiv.appendChild(milestoneContent);
+                    content.appendChild(milestoneDiv);
+                }
+            });
+
+            if (!hasVisibleTasks) {
+                content.innerHTML = '<div class="no-tasks">No tasks match your current filters.</div>';
+            }
+        }
+
+        function addAssignment(taskId) {
+            if (!isAdminMode) {
+                alert('Only admin can assign tasks. Please enable admin mode first.');
+                return;
+            }
+            
+            // Add a placeholder assignment that will be updated when user selects a member
+            addTaskAssignment(taskId, '');
+            renderTasks();
+        }
+
+        function updateAssignment(taskId, index, newMember) {
+            if (!isAdminMode) return;
+            
+            const currentAssignments = getTaskAssignments(taskId);
+            const oldMember = currentAssignments[index];
+            
+            if (oldMember) {
+                removeTaskAssignment(taskId, oldMember);
+            }
+            
+            if (newMember && newMember !== '') {
+                addTaskAssignment(taskId, newMember);
+            }
+            
+            renderTasks();
+            updateStats();
+        }
+
+        function removeAssignment(taskId, index) {
+            if (!isAdminMode) return;
+            
+            const currentAssignments = getTaskAssignments(taskId);
+            const memberToRemove = currentAssignments[index];
+            
+            if (memberToRemove) {
+                removeTaskAssignment(taskId, memberToRemove);
+                renderTasks();
+                updateStats();
+            }
+        }
+
+        function toggleMilestone(milestoneId) {
+            const isCollapsed = getMilestoneCollapsed(milestoneId);
+            setMilestoneCollapsed(milestoneId, !isCollapsed);
+            renderTasks();
+        }
+
+        function toggleTask(taskId) {
+            const completion = getTaskCompletion(taskId);
+            const isCurrentlyCompleted = completion.isCompleted;
+            
+            if (!isCurrentlyCompleted) {
+                // Task is being marked as complete - ask for name
+                currentTaskId = taskId;
+                document.getElementById('completionModal').style.display = 'block';
+                document.getElementById('completionName').focus();
+            } else {
+                // Task is being unmarked - confirm action
+                if (confirm("Are you sure you want to mark this task as incomplete?")) {
+                    setTaskCompletion(taskId, false);
+                    renderTasks();
+                    updateStats();
+                } else {
+                    // User cancelled - keep it checked
+                    const checkbox = event.target;
+                    checkbox.checked = true;
+                }
+            }
+        }
+
+        function closeCompletionModal() {
+            document.getElementById('completionModal').style.display = 'none';
+            document.getElementById('completionName').value = '';
+            
+            // Uncheck the checkbox if modal was cancelled
+            if (currentTaskId) {
+                const checkboxes = document.querySelectorAll('.task-checkbox');
+                checkboxes.forEach(cb => {
+                    if (cb.getAttribute('onchange').includes(currentTaskId)) {
+                        cb.checked = false;
+                    }
+                });
+            }
+            currentTaskId = null;
+        }
+
+        function confirmCompletion() {
+            const completedBy = document.getElementById('completionName').value.trim();
+            
+            if (completedBy && currentTaskId) {
+                setTaskCompletion(currentTaskId, true, completedBy);
+                renderTasks();
+                updateStats();
+                closeCompletionModal();
+            } else {
+                alert('Please enter your name to confirm completion.');
+            }
+        }
+
+        function toggleAdminMode() {
+            const passwordInput = document.getElementById('adminPassword');
+            const adminBtn = document.getElementById('adminBtn');
+            
+            if (!isAdminMode) {
+                if (passwordInput.value === adminPassword) {
+                    isAdminMode = true;
+                    adminBtn.textContent = 'Disable Admin';
+                    adminBtn.className = 'btn btn-secondary';
+                    passwordInput.style.display = 'none';
+                    renderTasks();
+                    alert('Admin mode enabled! You can now assign tasks.');
+                } else {
+                    alert('Incorrect password. Please try again.');
+                    passwordInput.value = '';
+                }
+            } else {
+                isAdminMode = false;
+                adminBtn.textContent = 'Enable Admin';
+                adminBtn.className = 'btn btn-primary';
+                passwordInput.style.display = 'block';
+                passwordInput.value = '';
+                renderTasks();
+                alert('Admin mode disabled.');
+            }
+        }
+
+        function updateStats() {
+            let total = 0, completed = 0, overdue = 0;
+
+            milestones.forEach(milestone => {
+                milestone.sections.forEach(section => {
+                    section.tasks.forEach((task, taskIndex) => {
+                        const taskId = `${milestone.id}-${section.title}-${taskIndex}`;
+                        const completion = getTaskCompletion(taskId);
+                        total++;
+                        if (completion.isCompleted) {
+                            completed++;
+                        } else if (new Date() > new Date(milestone.deadline)) {
+                            overdue++;
+                        }
+                    });
+                });
+            });
+
+            document.getElementById('totalTasks').textContent = total;
+            document.getElementById('completedTasks').textContent = completed;
+            document.getElementById('pendingTasks').textContent = total - completed;
+            document.getElementById('overdueTasks').textContent = overdue;
+        }
+
+        function clearFilters() {
+            document.getElementById('memberFilter').value = '';
+            document.getElementById('milestoneFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            renderTasks();
+        }
+
+        function exportProgress() {
+            // Export database as SQL
+            const data = db.export();
+            const blob = new Blob([data], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tournament-progress.db';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function markAllComplete() {
+            if (!isAdminMode) {
+                alert('Only admin can mark milestones complete. Please enable admin mode first.');
+                return;
+            }
+            
+            const milestoneFilter = document.getElementById('milestoneFilter').value;
+            if (!milestoneFilter) {
+                alert('Please select a milestone to mark as complete.');
+                return;
+            }
+
+            const milestone = milestones.find(m => m.id.toString() === milestoneFilter);
+            if (milestone && confirm(`Mark all tasks in "${milestone.title}" as complete?`)) {
+                milestone.sections.forEach(section => {
+                    section.tasks.forEach((task, taskIndex) => {
+                        const taskId = `${milestone.id}-${section.title}-${taskIndex}`;
+                        setTaskCompletion(taskId, true, 'Admin Bulk Complete');
+                    });
+                });
+                renderTasks();
+                updateStats();
+                alert(`All tasks in "${milestone.title}" marked as complete!`);
+            }
+        }
+
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Event listeners
+        document.getElementById('memberFilter').addEventListener('change', renderTasks);
+        document.getElementById('milestoneFilter').addEventListener('change', renderTasks);
+        document.getElementById('statusFilter').addEventListener('change', renderTasks);
+
+        // Modal event listeners
+        document.getElementById('completionName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                confirmCompletion();
+            }
+        });
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('completionModal');
+            if (event.target === modal) {
+                closeCompletionModal();
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
